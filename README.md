@@ -1,5 +1,7 @@
 The ndt_mapping and icp_mapping packages are based on Autoware (see https://github.com/CPFL/Autoware). Some other scripts/nodes are utility nodes.
 
+All of these code are licensed.
+
 ### Requirements
 - Velodyne ROS Driver from: https://github.com/ros-drivers/velodyne
 
