@@ -21,7 +21,7 @@
 using namespace std;
 using namespace ros;
 
-#define OUTPUT_POSE // To write x, y, z into a txt file
+// #define OUTPUT_POSE // To write x, y, z into a txt file
 
 void optimizeEssentialGraph(const VectorofPoses &NonCorrectedSim3, Pose3d endCorrectedPose,
 							VectorofPoses &CorrectedSim3)
@@ -101,51 +101,41 @@ void optimizeEssentialGraph(const VectorofPoses &NonCorrectedSim3, Pose3d endCor
 
 int main(int argc, char** argv)
 {
-  // Initiate node
-  ros::init(argc, argv, "pose_optimization_mapping");
-
-  // ros::NodeHandle nh;
-  // ros::Publisher map_pub = nh.advertise<sensor_msgs::PointCloud2>("optimized_graph", 10, true);
+	if(argc < 9)
+	{
+		std::cout << "ERROR: Missing argument(s)" << std::endl;
+		std::cout << "Use: rosrun my_package pose_optimization_mapping map_pose.csv x y z roll pitch yaw output_pose.csv" << std::endl;
+		return -1;
+	}
 
   // Do processing
   // Working dir
-  pcl::PointCloud<pcl::PointXYZI> map; // full map holder
-  map.header.frame_id = "map";
-	std::string csv = "map_pose.csv";
+	std::string csv = argv[1];
   std::cout << "Processing " << csv << " in the current directory" << std::endl;
 	std::ifstream csv_stream(csv);
 
   // Place-holder for csv stream variables
-	std::string line, pcd_filename, x_str, y_str, z_str, roll_str, pitch_str, yaw_str;
-
+	std::string line, metadata_str, x_str, y_str, z_str, roll_str, pitch_str, yaw_str;
+	std::vector<std::string> key_vec, seq_vec, sec_vec, nsec_vec;
 	// Place-holder for input and output poses
 	VectorofPoses non_corrected_sim3, corrected_sim3;
 
 	// Get data from csv and pcd
-#ifdef OUTPUT_POSE
-  std::ofstream inp;
-  std::string in_file = "initial_pose@10oct-1200.csv";
-  inp.open(in_file);
-  inp << "x,y,z,roll,pitch,yaw" << std::endl;
-#endif // OUTPUT_POSE
-	std::vector< pcl::PointCloud<pcl::PointXYZI> > all_scans;
+	// std::vector< pcl::PointCloud<pcl::PointXYZI> > all_scans;
+	getline(csv_stream, line); // skip header line
   while(getline(csv_stream, line))
   {
-  	pcl::PointCloud<pcl::PointXYZI> current_scan;
   	std::stringstream line_stream(line);
 
-    // Get pcd file
-    getline(line_stream, pcd_filename, ',');
-    std::cout << "Loading file: "<<  pcd_filename << std::endl;
-    if(pcl::io::loadPCDFile<pcl::PointXYZI>(pcd_filename, current_scan) == -1)
-    {
-      std::cout << "Couldn't read " << pcd_filename << "." << std::endl;
-      return -1;
-    }
-    std::cout << "Loaded " << current_scan.size() << " data points from " << pcd_filename << std::endl;
-    all_scans.push_back(current_scan);
-    
-    // and the rest of the data
+    // data
+		getline(line_stream, metadata_str, ','); // key
+		key_vec.push_back(metadata_str);
+		getline(line_stream, metadata_str, ','); // sequence
+		seq_vec.push_back(metadata_str);
+		getline(line_stream, metadata_str, ','); // sec
+		sec_vec.push_back(metadata_str);
+		getline(line_stream, metadata_str, ','); // nsec
+		nsec_vec.push_back(metadata_str);
     getline(line_stream, x_str, ',');
     double x = std::stod(x_str);
     getline(line_stream, y_str, ',');
@@ -168,19 +158,13 @@ int main(int argc, char** argv)
     non_corrected_sim3.push_back(current_pose);
 
     // Show output
-    std::cout << "Number of points in scan: " << current_scan.size() << std::endl;
     std::cout << x << " " << y << " " << z << " " << roll << " " << pitch << " " << yaw << std::endl;
-    std::cout << "---------------------------------------" << std::endl;
-
-#ifdef OUTPUT_POSE
-    inp << x << "," << y << "," << z << "," << roll << "," << pitch << "," << yaw << std::endl;
-#endif // OUTPUT_POSE
 	}
 
 	// Ground-truth pose for the final scan
-	Eigen::Vector3d final_scan_p(-74.2269, 14.2863, 3.40642);
+	Eigen::Vector3d final_scan_p(std::stod(argv[2]), std::stod(argv[3]), std::stod(argv[4]));
 	tf::Quaternion final_q;
-	final_q.setRPY(0.0418069, -0.0479844, 1.64459);
+	final_q.setRPY(std::stod(argv[5]), std::stod(argv[6]), std::stod(argv[7]));
 	Eigen::Quaterniond final_scan_q(final_q.w(), final_q.x(), final_q.y(), final_q.z());
   Pose3d end_corrected_pose(final_scan_p, final_scan_q);
 
@@ -188,17 +172,15 @@ int main(int argc, char** argv)
   optimizeEssentialGraph(non_corrected_sim3, end_corrected_pose, corrected_sim3);
   
   // Re-map with optimized pose
-#ifdef OUTPUT_POSE  // Also, output pose.txt 
+	// Also, output pose.txt 
   std::ofstream outp;
-  std::string out_file = "optimized_pose@10oct-1200.csv";
+  std::string out_file = argv[8];
   outp.open(out_file);
-  outp << "x,y,z,roll,pitch,yaw" << std::endl;
-#endif // OUTPUT_POSE
+  outp << "key,seq,sec,nsec,x,y,z,roll,pitch,yaw" << std::endl;
 
-  if(all_scans.size() != corrected_sim3.size())
+  if(non_corrected_sim3.size() != corrected_sim3.size())
   {
   	std::cout << "Error: number of pointclouds and poses do not match!" << std::endl;
-  	std::cout << "Pointclouds: " << all_scans.size() << std::endl;
   	std::cout << "Poses: " << corrected_sim3.size() << std::endl;
   	return -1;
   }
@@ -216,33 +198,13 @@ int main(int argc, char** argv)
   										corrected_sim3[i].q.w());
   	double roll, pitch, yaw;
   	tf::Matrix3x3(q).getRPY(roll, pitch, yaw);
-  	Eigen::Affine3f global_transform = pcl::getTransformation(x, y, z, roll, pitch, yaw);
 
-  	// Do transform
-  	pcl::PointCloud<pcl::PointXYZI> dst;
-  	pcl::transformPointCloud(all_scans[i], dst, global_transform);
-
-  	// Add tf-ed scan to map
-  	map += dst;
-
-#ifdef OUTPUT_POSE // to .txt
-    outp << x << "," << y << "," << z << "," << roll << "," << pitch << "," << yaw << std::endl;
-#endif // OUTPUT_POSE
+    outp << key_vec[i] << "," << seq_vec[i] << "," << sec_vec[i] << "," << nsec_vec[i] << ","
+				 << x << "," << y << "," << z << "," << roll << "," << pitch << "," << yaw << std::endl;
   }
 
-  std::cout << "Re-mapping finished. Total map size: " << map.size() << " points." << std::endl;
   // Writing Point Cloud data to PCD file
-  std::string out_filename = "optimized_graph";
-  pcl::io::savePCDFileBinary(out_filename + ".pcd", map);
-  std::cout << "Finished. Saved pointcloud to " << out_filename << ".pcd" << std::endl;
-#ifdef OUTPUT_POSE
-  std::cout << "initial_pose.csv and optimized_poses.csv written into the current directory." << std::endl;
-#endif
-  // Publish to topic to view in rviz
-  // sensor_msgs::PointCloud2::Ptr map_msg_ptr(new sensor_msgs::PointCloud2);
-  // pcl::toROSMsg(map, *map_msg_ptr);
-  // map_pub.publish(*map_msg_ptr);
+  std::cout << argv[8] << " written into the current directory." << std::endl;
 
-  // ros::spin();
   return 0;
 }

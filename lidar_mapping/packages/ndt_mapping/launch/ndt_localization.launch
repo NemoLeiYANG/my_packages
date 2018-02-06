@@ -2,10 +2,8 @@
 <launch>
 
   <!-- send table.xml to param server -->
-  <arg name="bag" default="$(env HOME)/23jan-datacollection/lidar_data/23jan-round1.bag" />
-  <arg name="start_time" default="0" /> <!-- all timings are in seconds -->
-  <arg name="play_duration" default="-1" /> <!-- set negative to play all -->
-  <arg name="namespace" default="aroundtheworld" /> <!-- set to do multiple mapping at once -->
+  <arg name="map" default="something" />
+  <arg name="namespace" default="carpark2" /> <!-- set to do multiple mapping at once -->
   <arg name="output_directory" default="$(env HOME)/ndt_custom/$(arg namespace)/" />
 
   <!-- ndt algorithm params -->
@@ -28,9 +26,7 @@
 
 <!-- rosrun ndt_localizer ndt_mapping  -->
   <node pkg="ndt_mapping" type="ndt_mapping" name="ndt_mapping_$(arg namespace)" output="screen">
-  	<param name="bag_file" value="$(arg bag)" />
-  	<param name="start_time" value="$(arg start_time)" />
-  	<param name="play_duration" value="$(arg play_duration)" />
+  	<param name="map" value="$(arg map)" />
     <param name="namespace" value="$(arg namespace)" />
     <param name="output_directory" value="$(arg output_directory)" />
 

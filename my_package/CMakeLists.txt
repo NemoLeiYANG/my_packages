@@ -23,7 +23,7 @@ find_package(catkin REQUIRED COMPONENTS roslaunch
 find_package(PCL REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Ceres REQUIRED)
-find_package(Eigen3 3.3 REQUIRED)
+find_package(Eigen3 REQUIRED)
 roslaunch_add_file_check(launch)
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
@@ -200,6 +200,3 @@ add_new_node(visualize_pose)
 # add_new_node(csv_to_bag)
 add_new_node(ndt_to_imu)
 add_new_node(px2_velo_debug)
-
-# SET(CMAKE_CXX_FLAGS "-std=c++11 -O2 -g -Wall -fopenmp -mavx ${CMAKE_CXX_FLAGS} -I /usr/local/include/eigen3/")
-add_new_node(M2DP)

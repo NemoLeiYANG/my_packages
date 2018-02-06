@@ -27,20 +27,25 @@ instead of putting the directory as an argument because I have not implement tha
 
 int main(int argc, char** argv)
 {
-  // ros::init(argc, argv, "import_to_bag");
-  // ros::NodeHandle nh;
-  // ros::Publisher pub = nh.advertise<sensor_msgs::PointCloud2>("/points_raw", 1);
+  if(argc != 4)
+  {
+    std::cout << "ERROR: Wrong argument number." << std::endl;
+    std::cout << "Usage: rosrun my_package import_to_bag TXT_DIR TIMESTAMP.csv OUTPUT.bag" << std::endl;
+    return(-1);
+  }
 
-  std::string csv_filename = "LidarTimestamp.csv";
+  std::string txt_dir = argv[1];
+  if(txt_dir.back() != '/')
+    txt_dir.push_back('/');
+  std::string csv_filename = argv[2];
+  std::string bag_filename = argv[3];
   // Heads-up reminder for usage
-  std::cout << "INFO: Reading data in the txts/ directory." << std::endl;
+  std::cout << "INFO: Reading data in the " << txt_dir << " directory." << std::endl;
+  std::cout << "Please ensure that ONLY .txt files with the correct format are in " << txt_dir << " directory." << std::endl;
   std::cout << "INFO: Reading " << csv_filename << " file in current directory." << std::endl;
-  std::cout << "\nPlease ensure that bags/ and pcds/ directory ARE CREATED in this directory." << std::endl;
-  std::cout << "Also ensure that ONLY .txt files with the correct format are in txts/ directory." << std::endl;
 
   // Output bag file
   rosbag::Bag bag;
-  std::string bag_filename = "bags/new.bag";
   std::cout << "Output: " << bag_filename << std::endl;
   bag.open(bag_filename, rosbag::bagmode::Write);
 
@@ -77,8 +82,8 @@ int main(int argc, char** argv)
   {
     std::ifstream in_stream;
     std::cout << "--------------------------------------------------------------\n";
-    std::cout << "Reading: txts/" << file_number << ".txt" << std::endl;
-    in_stream.open("txts/" + std::to_string(file_number) + ".txt");
+    std::cout << "Reading: " << txt_dir << file_number << ".txt" << std::endl;
+    in_stream.open(txt_dir + std::to_string(file_number) + ".txt");
 
     // Place-holder for variables
     pcl::PointCloud<pcl::PointXYZI> scan;
@@ -116,13 +121,13 @@ int main(int argc, char** argv)
 
     if(scan.size() == 0)
     {
-      std::cout << "INFO: No points to read in txts/" << file_number << ".txt" << std::endl;
+      std::cout << "INFO: No points to read in " << txt_dir << file_number << ".txt" << std::endl;
       file_number++;
       continue;
     }
     // Write to pcd file
     // pcl::io::savePCDFileBinary("pcds/Lidar" + std::to_string(file_number) + ".pcd", scan);
-    std::cout << "(Disabled) Saved [" << scan.size() << " points, " << points_skipped 
+    std::cout << "(Func disabled) Saved [" << scan.size() << " points, " << points_skipped 
               << " skipped] points to pcds/Lidar" << file_number << ".pcd" << std::endl;
 
     // Timestamp for msg
@@ -148,13 +153,12 @@ int main(int argc, char** argv)
   catch(std::exception& e)
   {
     std::cout << e.what() << std::endl;
-    std::cout << "No more data for timestamp? Skipping the rest of LidarTimestamp.csv" << std::endl;
+    std::cout << "No more data for timestamp? Skipping the rest of " << csv_filename << std::endl;
   }
 
   bag.close();
-
   std::cout << "Processed: " << file_number - 1 << " / Expected: " << file_count << std::endl;
-  std::cout << "Finished. Wrote bag file to bags/." << std::endl;
+  std::cout << "Finished. Wrote bag file to " << bag_filename << std::endl;
 
   return 0;
 }
