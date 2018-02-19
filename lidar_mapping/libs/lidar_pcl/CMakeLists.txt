@@ -1,7 +1,11 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(lidar_pcl)
 
-find_package(catkin REQUIRED COMPONENTS)
+find_package(catkin REQUIRED COMPONENTS
+  roscpp
+  pcl_ros
+  pcl_conversions  
+)
 find_package(PCL REQUIRED)
 
 set(SUBSYS_NAME lidar_pcl)
@@ -34,7 +38,7 @@ set(impl_incs
   "include/lidar_pcl/impl/ndt_lidar_mapping.hpp"
 )
 
-include_directories(${PCL_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/include")
+include_directories(${PCL_INCLUDE_DIRS} ${catkin_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 SET(CMAKE_CXX_FLAGS "-std=c++11 -O2 -g -Wall ${CMAKE_CXX_FLAGS}")
 

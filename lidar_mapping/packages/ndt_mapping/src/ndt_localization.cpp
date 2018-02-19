@@ -364,43 +364,6 @@ void mySigintHandler(int sig) // Publish the map/final_submap if node is termina
 
 int main(int argc, char** argv)
 {
-  previous_pose.x = 0.0;
-  previous_pose.y = 0.0;
-  previous_pose.z = 0.0;
-  previous_pose.roll = 0.0;
-  previous_pose.pitch = 0.0;
-  previous_pose.yaw = 0.0;
-
-  ndt_pose.x = 0.0;
-  ndt_pose.y = 0.0;
-  ndt_pose.z = 0.0;
-  ndt_pose.roll = 0.0;
-  ndt_pose.pitch = 0.0;
-  ndt_pose.yaw = 0.0;
-
-  current_pose.x = 0.0;
-  current_pose.y = 0.0;
-  current_pose.z = 0.0;
-  current_pose.roll = 0.0;
-  current_pose.pitch = 0.0;
-  current_pose.yaw = 0.0;
-
-  guess_pose.x = 0.0;
-  guess_pose.y = 0.0;
-  guess_pose.z = 0.0;
-  guess_pose.roll = 0.0;
-  guess_pose.pitch = 0.0;
-  guess_pose.yaw = 0.0;
-
-  diff = 0.0;
-  diff_x = 0.0;
-  diff_y = 0.0;
-  diff_z = 0.0;
-  diff_yaw = 0.0;
-
-  // current_velocity.x = 0;
-  // current_velocity.y = 0;
-  // current_velocity.z = 0;
 
   pcl::getTransformation(0, 0, 0, 0, 0, 0, current_pose_tf);
   pcl::getTransformation(0, 0, 0, 0, 0, 0, previous_pose_tf);
@@ -424,12 +387,46 @@ int main(int argc, char** argv)
   private_nh.getParam("min_add_scan_shift", min_add_scan_shift);
   private_nh.getParam("min_add_scan_yaw_diff", min_add_scan_yaw_diff);
 
+  private_nh.getParam("initial_x", guess_pose.x);
+  private_nh.getParam("initial_y", guess_pose.y);
+  private_nh.getParam("initial_z", guess_pose.z);
+  private_nh.getParam("initial_roll", guess_pose.roll);
+  private_nh.getParam("initial_pitch", guess_pose.pitch);
+  private_nh.getParam("initial_yaw", guess_pose.yaw);
+
   private_nh.getParam("tf_x", _tf_x);
   private_nh.getParam("tf_y", _tf_y);
   private_nh.getParam("tf_z", _tf_z);
   private_nh.getParam("tf_roll", _tf_roll);
   private_nh.getParam("tf_pitch", _tf_pitch);
   private_nh.getParam("tf_yaw", _tf_yaw);
+
+  previous_pose.y = guess_pose.x;
+  previous_pose.x = guess_pose.y;
+  previous_pose.z = guess_pose.z;
+  previous_pose.roll = guess_pose.roll;
+  previous_pose.pitch = guess_pose.pitch;
+  previous_pose.yaw = guess_pose.yaw;
+
+  ndt_pose.x = 0.0;
+  ndt_pose.y = 0.0;
+  ndt_pose.z = 0.0;
+  ndt_pose.roll = 0.0;
+  ndt_pose.pitch = 0.0;
+  ndt_pose.yaw = 0.0;
+
+  current_pose.x = guess_pose.x;
+  current_pose.y = guess_pose.y;
+  current_pose.z = guess_pose.z;
+  current_pose.roll = guess_pose.roll;
+  current_pose.pitch = guess_pose.pitch;
+  current_pose.yaw = guess_pose.yaw;
+
+  diff = 0.0;
+  diff_x = 0.0;
+  diff_y = 0.0;
+  diff_z = 0.0;
+  diff_yaw = 0.0;
 
   std::cout << "\nNDT Mapping Parameters:" << std::endl;
   std::cout << "map: " << _map << std::endl;

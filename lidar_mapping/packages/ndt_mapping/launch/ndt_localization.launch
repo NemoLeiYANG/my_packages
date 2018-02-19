@@ -2,8 +2,8 @@
 <launch>
 
   <!-- send table.xml to param server -->
-  <arg name="map" default="something" />
-  <arg name="namespace" default="carpark2" /> <!-- set to do multiple mapping at once -->
+  <arg name="map" default="/home/echo/9feb_lidar/0.10_8jan-carpark2.pcd" />
+  <arg name="namespace" default="" /> <!-- set to do multiple mapping at once -->
   <arg name="output_directory" default="$(env HOME)/ndt_custom/$(arg namespace)/" />
 
   <!-- ndt algorithm params -->
@@ -15,6 +15,14 @@
   <arg name="min_scan_range" default="3.2" />
   <arg name="min_add_scan_shift" default="0.5" />  
   <arg name="min_add_scan_yaw_diff" default="0.013" />
+
+  <!-- initial pose TODO: add GNSS when available T.T -->
+  <arg name="intial_x" default="-1.0535" />
+  <arg name="intial_y" default="-3.4359" />
+  <arg name="intial_z" default="-0.4573" />
+  <arg name="intial_roll" default="0.0551" />
+  <arg name="intial_pitch" default="-0.0017" />
+  <arg name="intial_yaw" default="0.1786" />
   
   <!-- tf from lidar frame to car frame -->
   <arg name="tf_x" default="1.2"/>
@@ -25,7 +33,7 @@
   <arg name="tf_yaw" default="0.0"/>
 
 <!-- rosrun ndt_localizer ndt_mapping  -->
-  <node pkg="ndt_mapping" type="ndt_mapping" name="ndt_mapping_$(arg namespace)" output="screen">
+  <node pkg="ndt_mapping" type="ndt_localization" name="ndt_localization_$(arg namespace)" output="screen">
   	<param name="map" value="$(arg map)" />
     <param name="namespace" value="$(arg namespace)" />
     <param name="output_directory" value="$(arg output_directory)" />
