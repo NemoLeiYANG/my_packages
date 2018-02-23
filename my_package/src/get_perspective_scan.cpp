@@ -51,6 +51,42 @@ inline double calculateMinAngleDist(double first, double second) // in radian
   return difference;
 }
 
+void occlusionFilter(pcl::PointCloud<pcl::PointXYZI> &in_cloud)
+{
+  // Spherical voxel properties: r: 0->50, azi: 0 -> 2 PI, elev: -PI/2 -> PI/2
+  const PI = 3.141592653589793238;
+  const double del_r = 0.5;         // radial distance
+  const double del_theta = pi / 200;     // azimuth angle
+  const double del_phi = pi / 100;  // elevation angle
+  // const 
+
+  // Note that the max distance of in_cloud is always 50.0m because we cut with kdtree
+  // double max_dist_sq = 0;
+  // for(pcl::PointCloud<pcl::PointXYZI>::const_iterator item = in_cloud.begin(); item < in_cloud.end(); item++)
+  // {
+  //   double radial_dist_sq = item->x * item->x + item->y * item->y + item->z * item->z;
+  //   if(max_dist_sq < radial_dist_sq)
+  //   {
+  //     max_dist_sq = radial_dist_sq;
+  //   }
+  // }
+  // double max_dist = sqrt(max_dist_sq);
+  // printf("maxdist: %lf\n", max_dist);
+
+  // Spherical voxel allocation and occlusion denial
+  voxel_states[]
+  for(pcl::PointCloud<pcl::PointXYZI>::const_iterator item = in_cloud.begin(); item < in_cloud.end(); item++)
+  {
+    double radial_dist_sq = item->x * item->x + item->y * item->y + item->z * item->z;
+    if(max_dist_sq < radial_dist_sq)
+    {
+      max_dist_sq = radial_dist_sq;
+    }
+  }
+
+  return;
+}
+
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "get_perspective_scan");
@@ -59,10 +95,10 @@ int main(int argc, char** argv)
   
   // Load input
   // std::string filename = argv[1];
-  std::string cloudfile = "/home/zwu/Desktop/CarPark-2-8-Jan.pcd";
-  std::string posefile = "/home/zwu/16jan-datacollection/16-Jan-CarPark2-DataCollection/R3/localizing_pose.csv"; // localizing_pose
-  std::string camerafile = "/home/zwu/16jan-datacollection/16-Jan-CarPark2-DataCollection/R3/timestamp.txt"; // cam timestamp
-  std::string file_location = "/home/zwu/16jan-datacollection/16-Jan-CarPark2-DataCollection/R3/lidar/"; // output dir
+  std::string cloudfile = "/home/zwu/demo_data/0.10_8jan-carpark2.pcd";
+  std::string posefile = "/home/zwu/9feb-datacollection/localizing_pose.csv"; // localizing_pose
+  std::string camerafile = "/home/zwu/9feb-datacollection/timestamp.txt"; // cam timestamp
+  std::string file_location = "/home/zwu/9feb-datacollection/lidar_input_offset/"; // output dir
  #ifdef OFFSET_TRANSFORM
   Eigen::Affine3d offset_tf;
   pcl::getTransformation(0, 0, 0, -0.02, 0, -0.01, offset_tf);
@@ -115,7 +151,7 @@ int main(int argc, char** argv)
 
  #ifdef OUTPUT_INTERPOLATED_POSE
   std::ofstream intrpl_pose_stream;
-  std::string intrpl_pose_file = "/home/zwu/16jan-datacollection/16-Jan-CarPark2-DataCollection/R3/interpolated_pose_16jan_round2_3.csv";
+  std::string intrpl_pose_file = "/home/zwu/9feb-datacollection/new_pose.csv";
   intrpl_pose_stream.open(intrpl_pose_file);
   intrpl_pose_stream << "timestamp,x,y,z,roll,pitch,yaw" << std::endl;
  #endif
@@ -125,6 +161,7 @@ int main(int argc, char** argv)
     std::stringstream line_stream(line);
 
     // Get data value
+    getline(line_stream, seq_str, ',');
     getline(line_stream, seq_str, ',');
     getline(line_stream, sec_str, ',');
     getline(line_stream, nsec_str, ',');
@@ -241,7 +278,7 @@ int main(int argc, char** argv)
     std::vector<int> pointIdxRadiusSearch;
     std::vector<float> pointRadiusSquaredDistance;
 
-    float radius = 30.0;
+    float radius = 50.0;
     pcl::PointCloud<pcl::PointXYZI> nearestCloud;
     if(kdtree.radiusSearch(searchPoint, radius, pointIdxRadiusSearch, pointRadiusSquaredDistance) > 0)
     {
@@ -262,6 +299,9 @@ int main(int argc, char** argv)
 
     pcl::PointCloud<pcl::PointXYZI>::Ptr localCloud(new pcl::PointCloud<pcl::PointXYZI>());
     pcl::transformPointCloud(nearestCloud, *localCloud, transform.inverse());
+
+    // Do occlusion filtering
+    occlusionFilter(*localCloud);
 
    #ifdef VOXEL_GRID_OCCLUSION
     // Set up voxel_grid_occlusion_estimation
