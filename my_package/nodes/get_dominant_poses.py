@@ -1,3 +1,4 @@
+#! /usr/bin/env python
 from mpl_toolkits.mplot3d import Axes3D # ALWAYS IMPORT Axes3D BEFORE pandas AND PLT
 from math import sin, cos, sqrt
 import numpy as np
@@ -8,7 +9,7 @@ import matplotlib.pyplot as plt
 if __name__=='__main__':
 	# import data
 	# [file name, color, label, linestyle, linewidth]
-	file = ['/home/echo/ndt_custom/map_pose_1.csv', 'r', 'ongoing', '-', 1]
+	file = ['/home/zwu/9feb-datacollection/localizing_pose.csv', 'r', 'pose', '-', 1]
 	data = pd.read_csv(file[0])
 
 	# added-scan-only filtering
@@ -22,6 +23,8 @@ if __name__=='__main__':
 	# Process
 	local_list = []
 	localized_poses = []
+	previous_cluster = [0, 0]
+	distance_array = []
 	# for i in range(1, 1000):
 	for i in range(1, len(data['x'])):
 		dist_x = data['x'][i] - data['x'][i-1]
@@ -30,13 +33,29 @@ if __name__=='__main__':
 		if distance < 0.05:
 			local_list.append(i)
 		else:
-			if(len(local_list) > 15):
-				localized_poses.append(local_list[int(len(local_list) / 2)])
+			if(len(local_list) > 15): #new cluster!
+				new_index = local_list[int(len(local_list) / 2)]
+				cluster_dist_x = data['x'][new_index] - previous_cluster[0]
+				cluster_dist_y = data['y'][new_index] - previous_cluster[1]
+				cluster_dist = sqrt(cluster_dist_x * cluster_dist_x + cluster_dist_y * cluster_dist_y)
+				if(len(local_list) <= 20):
+					print('Discarding cluster @ index {}/{} since its too small ({})'.format(new_index, len(localized_poses) + 1, len(local_list)))
+				elif(cluster_dist < 0.5):
+					print('Discarding cluster @ index {}/{} since its too close to the prev cluster'.format(new_index, len(localized_poses) + 1))
+				else:
+					localized_poses.append(new_index)
+					distance_array.append(cluster_dist)
+				previous_cluster = [data['x'][new_index], data['y'][new_index]]
+				# print('Distance: {}, \tlocal size: {}, \tindex: {}'.format(cluster_dist, len(local_list), new_index))
 			local_list = []
 
-		print('Distance: {}, local size: {}'.format(distance, len(local_list)))
 	print('Found {} positions'.format(len(localized_poses)))
-	result_df = data.iloc[localized_poses]
+	# result_df = data.iloc[localized_poses]
+	data.loc[localized_poses, 'key'] = 1
+	result_df = data
+	# result_df['timestamp'] = (result_df['sec'] * 1e6 + result_df['nsec'] / 1e3).astype(int)
+	columns_to_write = ['key', 'sequence', 'sec', 'nsec', 'x', 'y', 'z', 'roll', 'pitch', 'yaw']
+	result_df.to_csv('/home/zwu/9feb-datacollection/maxima_pose.csv', cols=columns_to_write, index=False)
 
 	ax = plt.figure('3d-plot').add_subplot(111, projection='3d')
 	plt.axis('equal')
@@ -76,11 +95,22 @@ if __name__=='__main__':
 	# 	dy = data.iloc[j]['y'] - data.iloc[j-1]['y']
 	# 	dz = data.iloc[j]['z'] - data.iloc[j-1]['z']
 	# 	travel_dist[j] = travel_dist[j-1] + np.sqrt(dx**2 + dy**2 + dz**2)
-
+	
 	# plt.scatter(travel_dist, data['z'], 
 	# 						color=file[1], label=file[2], s=0.5)
 	# plt.legend()
 	# plt.xlabel('Travel distance')
 	# plt.ylabel('z')
+	plt.figure('dist hist')
+	plt.hist(distance_array, bins=100)
+
+	plt.figure('time diff hist')
+	timediff_array = []
+	for i in range(1, len(result_df['sec'])):
+		timediff = float(result_df.iloc[i]['sec'] - result_df.iloc[i-1]['sec']) + (result_df.iloc[i]['nsec'] - result_df.iloc[i-1]['nsec']) * 1e-9
+		timediff_array.append(timediff)
+
+	plt.plot(range(len(timediff_array)), timediff_array)
+	# plt.hist(timediff_array, bins = 100)
 
 	plt.show()

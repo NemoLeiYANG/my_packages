@@ -52,9 +52,9 @@
 int main(int argc, char** argv)
 { 
   // Input data 
-  std::string bagfile = "/home/zwu/18dec-datacollection/round2/bags/18dec-carpark.bag";
-  std::string camerafile = "/home/zwu/18dec-datacollection/round2/18dec-round2/timestamp.txt";
-  std::string output_dir = "/home/zwu/18dec-datacollection/round2/lidarscaninput_offset/";
+  std::string bagfile = "/home/zwu/9feb-datacollection/9feb-carpark2-orig.bag";
+  std::string camerafile = "/home/zwu/9feb-datacollection/timestamp.txt";
+  std::string output_dir = "/home/zwu/9feb-datacollection/lidar_scan_input_offset/";
  
  #ifdef OFFSET_TRANSFORM
   Eigen::Affine3d offset_tf;

@@ -1,3 +1,5 @@
+#! /usr/bin/env python
+
 from mpl_toolkits.mplot3d import Axes3D # ALWAYS IMPORT Axes3D BEFORE pandas AND PLT
 from math import sin, cos
 import numpy as np
@@ -9,7 +11,7 @@ if __name__=='__main__':
 	# import data
 	# [file name, color, label, linestyle, linewidth]
 	file = [
-					['/home/echo/ndt_custom/map_pose.csv', 'r', 'ongoing', '-', 1],
+					['/home/zwu/9feb-datacollection/maxima_pose.csv', 'r', 'ongoing', '-', 1],
 				 ]
 	data = [pd.read_csv(element[0]) for element in file]
 
@@ -18,7 +20,7 @@ if __name__=='__main__':
 
 	# off-set
 	# data[0]['z'] -= 2
-	data[0] = data[0][7:]
+	# data[0] = data[0][7:]
 	# data[1] = data[1][120:600]
 
 	ax = plt.figure('3d-plot').add_subplot(111, projection='3d')

@@ -1,38 +1,33 @@
 #include <ros/ros.h>
-// #include <dynamic_reconfigure/server.h>
 #include <sensor_msgs/PointCloud2.h>
-// #include <my_package/transformPointsConfig.h>
 
 #include <pcl/io/io.h>
 #include <pcl/io/pcd_io.h>
-// #include <pcl/io/ply_io.h>
-// #include <pcl/point_cloud.h>
 #include <pcl/common/common.h>
-// #include <pcl/common/angles.h>
 #include <pcl/common/transforms.h>
 #include <pcl_conversions/pcl_conversions.h>
-// #include <pcl/point_types.h>
-// #include <pcl/conversions.h>
-// #include <pcl_ros/transforms.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/kdtree/kdtree_flann.h>
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
+#include <cmath>
 #include <iostream>
 #include <fstream>
-// #include <sstream>
 #include <string>
 #include <vector>
 
 #define OUTPUT_INTERPOLATED_POSE // to a csv file
 // #define VOXEL_GRID_OCCLUSION // do not enable
-// #define OFFSET_TRANSFORM // Only enable for 6cams-Lidar32E-PX2 system!!
+// #define OFFSET_TRANSFORM
 
 #ifdef VOXEL_GRID_OCCLUSION
 #include <pcl/filters/voxel_grid_occlusion_estimation.h>
 #endif
+
+typedef pcl::PointXYZI Point_t;
+typedef pcl::PointCloud<Point_t> Cloud_t;
 
 struct pose
 {
@@ -55,26 +50,74 @@ inline double calculateMinAngleDist(double first, double second) // in radian
   return difference;
 }
 
+void occlusionFilter(Cloud_t &in_cloud)
+{
+  // Spherical voxel properties: r: 0->50(500), azi: 0->2 PI (400), elev: -PI/2->PI/2 (100)
+  const double PI = 3.141592653589793238;
+  const double del_r2 = 12.5;         // radial distance
+  const double del_theta = PI / 200;     // azimuth angle
+  const double del_phi = PI / 200;  // elevation angle
+  const int r_size = 200;
+  const int theta_size = 400;
+  const int phi_size = 200;
+  std::vector<std::vector<std::vector<int>>> state_matrix(r_size, std::vector<std::vector<int>>(theta_size, std::vector<int>(phi_size)));
+  std::vector<std::vector<std::vector<Cloud_t>>> cloud_matrix(r_size, std::vector<std::vector<Cloud_t>>(theta_size, std::vector<Cloud_t>(phi_size)));
+
+  // Spherical voxel allocation and occlusion denial
+  for(pcl::PointCloud<pcl::PointXYZI>::const_iterator item = in_cloud.begin(); item < in_cloud.end(); item++)
+  { 
+    int i = int((item->x * item->x + item->y * item->y + item->z * item->z) / del_r2);
+    int j = int((std::atan2(item->y, item->x) + PI) / del_theta);
+    int k = int((std::atan2(item->z, sqrt(item->x * item->x + item->y * item->y)) + PI/2) / del_phi);
+    if(i >= r_size) i = r_size - 1;
+    if(j >= theta_size) j = theta_size - 1;
+    if(k >= phi_size) k = phi_size - 1;
+    if(i < 0 || j < 0 || k < 0 || i >= r_size || j >= theta_size || k >= phi_size)
+    {
+      printf("Errorous index! (%d, %d, %d)\n", i, j, k);
+      return;
+    }
+    
+    state_matrix[i][j][k] = 1;
+    cloud_matrix[i][j][k].push_back(*item);
+  }
+
+  Cloud_t out_cloud;
+  for(int j = 0; j < theta_size; j++) for(int k = 0; k < phi_size; k++)
+  {
+    for(int i = 0; i < r_size; i++)
+      if(state_matrix[i][j][k] == 1 && cloud_matrix[i][j][k].size() > 2)
+      {
+        out_cloud += cloud_matrix[i][j][k];
+        break;
+      }
+  }
+
+  in_cloud.clear();
+  in_cloud = out_cloud;
+  return;
+}
+
 int main(int argc, char** argv)
 {
-  ros::init(argc, argv, "get_perspective_full_map");
-  ros::NodeHandle nh;
-  ros::Publisher scan_pub = nh.advertise<sensor_msgs::PointCloud2>("/my_scan", 100, true);
+  // ros::init(argc, argv, "get_perspective_scan");
+  // ros::NodeHandle nh;
+  // ros::Publisher scan_pub = nh.advertise<sensor_msgs::PointCloud2>("/interpolated_scan", 100, true);
   
   // Load input
   // std::string filename = argv[1];
-  // std::string cloudfile = "/home/zwu/demo_data/0.10_8jan-carpark2.pcd";
-  std::string cloudfile = "/home/zwu/LIDAR-DATA/8jan-carpark2.pcd";
+  std::string cloudfile = "/home/zwu/demo_data/0.10_8jan-carpark2.pcd";
+  // std::string cloudfile = "/home/zwu/LIDAR-DATA/8jan-carpark2.pcd";
   std::string posefile = "/home/zwu/9feb-datacollection/maxima_pose.csv"; // localizing_pose
   std::string camerafile = "/home/zwu/9feb-datacollection/timestamp.txt"; // cam timestamp
-  std::string file_location = "/home/zwu/9feb-datacollection/lidar_input/"; // output dir
+  std::string file_location = "/home/zwu/9feb-datacollection/lidar_maxima_input/"; // output dir
  #ifdef OFFSET_TRANSFORM
   Eigen::Affine3d offset_tf;
   pcl::getTransformation(0, 0, 0, -0.02, 0, -0.01, offset_tf);
  #endif
 
-  pcl::PointCloud<pcl::PointXYZI> src;
-  if(pcl::io::loadPCDFile<pcl::PointXYZI>(cloudfile, src) == -1)
+  Cloud_t src;
+  if(pcl::io::loadPCDFile<Point_t>(cloudfile, src) == -1)
   {
     std::cout << "Couldn't read " << cloudfile << "." << std::endl;
     return(-1);
@@ -275,6 +318,9 @@ int main(int argc, char** argv)
     pcl::PointCloud<pcl::PointXYZI>::Ptr localCloud(new pcl::PointCloud<pcl::PointXYZI>());
     pcl::transformPointCloud(nearestCloud, *localCloud, transform.inverse());
 
+    // Do occlusion filtering
+    occlusionFilter(*localCloud);
+
    #ifdef VOXEL_GRID_OCCLUSION
     // Set up voxel_grid_occlusion_estimation
     pcl::PointCloud<pcl::PointXYZI>::Ptr localVisibleCloud(new pcl::PointCloud<pcl::PointXYZI>());
@@ -312,15 +358,15 @@ int main(int argc, char** argv)
    #endif
 
     // Publish
-    sensor_msgs::PointCloud2::Ptr scan_msg_ptr(new sensor_msgs::PointCloud2);
-   #ifndef VOXEL_GRID_OCCLUSION
-    localCloud->header.frame_id = "map";
-    pcl::toROSMsg(*localCloud, *scan_msg_ptr);
-   #else
-    localVisibleCloud->header.frame_id = "map";
-    pcl::toROSMsg(*localVisibleCloud, *scan_msg_ptr);
-   #endif
-    scan_pub.publish(*scan_msg_ptr);
+  //   sensor_msgs::PointCloud2::Ptr scan_msg_ptr(new sensor_msgs::PointCloud2);
+  //  #ifndef VOXEL_GRID_OCCLUSION
+  //   localCloud->header.frame_id = "map";
+  //   pcl::toROSMsg(*localCloud, *scan_msg_ptr);
+  //  #else
+  //   localVisibleCloud->header.frame_id = "map";
+  //   pcl::toROSMsg(*localVisibleCloud, *scan_msg_ptr);
+  //  #endif
+  //   scan_pub.publish(*scan_msg_ptr);
 
     // Convert pointcloud to txt file and save
     std::ofstream pointcloud_stream;
