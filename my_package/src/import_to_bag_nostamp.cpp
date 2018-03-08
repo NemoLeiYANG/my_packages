@@ -24,16 +24,29 @@ instead of putting the directory as an argument because I have not implement tha
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <boost/filesystem.hpp>
 
+using namespace std;
 int main(int argc, char** argv)
 {
   // Heads-up reminder for usage
-  std::cout << "INFO: Reading data in the txts/ directory." << std::endl;
-  std::cout << "Please ensure that bags/ and pcds/ directory ARE CREATED in this directory." << std::endl;
-  std::cout << "Also ensure that ONLY .txt files with the correct format are in txts/ directory." << std::endl;
-  // Output bag file
+  if(argc < 3)
+  {
+    cout << "Missing input arguments!" << endl;
+    cout << "Usage: rosrun my_package import_to_bag_nostamp TXT_DIR OUTPUT.bag" << endl;
+  }
+  std::cout << "Ensure that ONLY .txt files with the correct format are in txts/ directory." << std::endl;
+  // Input dir
+  std::string input_dir = argv[1];
+  if(input_dir.back() != '/')
+    input_dir.push_back('/');
+  int file_count = std::distance(boost::filesystem::directory_iterator(input_dir), {});
+
+  // Output bag
+  std::string outbag_name = argv[2];
   rosbag::Bag bag;
-  bag.open("bags/15nov.bag", rosbag::bagmode::Write);
+  bag.open(outbag_name, rosbag::bagmode::Write);
+
   // Some fake data for pointcloud
   int seq = 1;
   int32_t sec = 1504851231; // this should be around 8 sep, noon
@@ -41,13 +54,13 @@ int main(int argc, char** argv)
   std::string frame_id = "velodyne";
 
   // Get all file in the specified directory
-  for(int file_number = 1, file_end = 726; file_number <= file_end; file_number++)
+  for(int file_number = 1; file_number <= file_count; file_number++)
   {
     std::string filename = std::to_string(file_number) + ".txt";
 
     std::ifstream in_stream;  
-    in_stream.open("txts/" + filename);
-    std::cout << "Reading: " << filename << std::endl;
+    in_stream.open(input_dir + "/" + filename);
+    cout << "Reading: " << filename << flush;
 
     // Place-holder for variables
     pcl::PointCloud<pcl::PointXYZI> scan; 
@@ -83,10 +96,8 @@ int main(int argc, char** argv)
       scan.push_back(new_point);
     }
     // Write to pcd file
-    std::string out_filename = filename;
-    std::cout << "Saved [" << scan.size() << " points, " << points_skipped << " skipped] points to pcds/" << out_filename << ".pcd" << std::endl;
+    cout << "... saved [" << scan.size() << " points, " << points_skipped << " skipped] " << endl;
     std::cout << "---------------------------------------" << std::endl;
-    pcl::io::savePCDFileBinary("pcds/" + out_filename + ".pcd", scan);
 
     // Write to bag file
     sensor_msgs::PointCloud2::Ptr scan_msg_ptr(new sensor_msgs::PointCloud2);
@@ -108,7 +119,7 @@ int main(int argc, char** argv)
   }
 
   bag.close();
-  std::cout << "Finished. Outputed bag file to bags/." << std::endl;
+  std::cout << "Finished. Outputed bag file to " << outbag_name << std::endl;
 
   return 0;
 }
