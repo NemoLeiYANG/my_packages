@@ -28,7 +28,7 @@
 
 #define OUTPUT_INTERPOLATED_POSE // to a csv file
 // #define VOXEL_GRID_OCCLUSION // do not enable
-// #define OFFSET_TRANSFORM // Only enable for 6cams-Lidar32E-PX2 system!!
+#define OFFSET_TRANSFORM // Only enable for 6cams-Lidar32E-PX2 system!!
 
 #ifdef VOXEL_GRID_OCCLUSION
 #include <pcl/filters/voxel_grid_occlusion_estimation.h>
@@ -64,13 +64,16 @@ int main(int argc, char** argv)
   // Load input
   // std::string filename = argv[1];
   // std::string cloudfile = "/home/zwu/demo_data/0.10_8jan-carpark2.pcd";
-  std::string cloudfile = "/home/zwu/LIDAR-DATA/8jan-carpark2.pcd";
-  std::string posefile = "/home/zwu/9feb-datacollection/maxima_pose.csv"; // localizing_pose
-  std::string camerafile = "/home/zwu/9feb-datacollection/timestamp.txt"; // cam timestamp
-  std::string file_location = "/home/zwu/9feb-datacollection/lidar_input/"; // output dir
+  std::string cloudfile = "/home/zwu/LIDAR-DATA/3oct-ds.pcd";
+  std::string posefile = "/home/zwu/23feb_data/5/ndt_matching.csv"; // localizing_pose
+  std::string camerafile = "/home/zwu/23feb_data/5/timestamp.txt"; // cam timestamp
+  std::string file_location = "/home/zwu/23feb_data/5/lidar_scan/"; // output dir
  #ifdef OFFSET_TRANSFORM
   Eigen::Affine3d offset_tf;
   pcl::getTransformation(0, 0, 0, -0.02, 0, -0.01, offset_tf);
+  Eigen::Affine3d lidar_baselink_tf;
+  pcl::getTransformation(1.2, 0, 2.0, 0, 0, 0, lidar_baselink_tf);
+  offset_tf = offset_tf * lidar_baselink_tf.inverse();
  #endif
 
   pcl::PointCloud<pcl::PointXYZI> src;
@@ -82,12 +85,12 @@ int main(int argc, char** argv)
   std::cout << "Loaded " << src.size() << " data points from " << cloudfile << std::endl;
   
   // Downsample the source cloud, apply voxelgrid filter
-  // double voxel_leaf_size = 0.3;
-  // pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr(new pcl::PointCloud<pcl::PointXYZI>(src));
-  // pcl::VoxelGrid<pcl::PointXYZI> voxel_grid_filter;
-  // voxel_grid_filter.setLeafSize(voxel_leaf_size, voxel_leaf_size, voxel_leaf_size);
-  // voxel_grid_filter.setInputCloud(src_ptr);
-  // voxel_grid_filter.filter(src);
+  double voxel_leaf_size = 0.3;
+  pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr(new pcl::PointCloud<pcl::PointXYZI>(src));
+  pcl::VoxelGrid<pcl::PointXYZI> voxel_grid_filter;
+  voxel_grid_filter.setLeafSize(voxel_leaf_size, voxel_leaf_size, voxel_leaf_size);
+  voxel_grid_filter.setInputCloud(src_ptr);
+  voxel_grid_filter.filter(src);
 
   // And set up KDTree
   pcl::PointCloud<pcl::PointXYZ> tmp_xyz;
@@ -113,12 +116,13 @@ int main(int argc, char** argv)
   std::vector<pose> lidar_poses;
   getline(pose_stream, line);
   std::cout << "File sequence: " << line << std::endl;
+  std::cout << "Expected sequence: key,seq,sec,nsec,x,y,z,roll,pitch,yaw" << std::endl;
   std::cout << "Collecting localized lidar poses and time stamps." << std::endl;
   const double lidar_time_offset = -2.1;
 
  #ifdef OUTPUT_INTERPOLATED_POSE
   std::ofstream intrpl_pose_stream;
-  std::string intrpl_pose_file = "/home/zwu/9feb-datacollection/new_pose.csv";
+  std::string intrpl_pose_file = "/home/zwu/23feb_data/5/interpolated_pose.csv";
   intrpl_pose_stream.open(intrpl_pose_file);
   intrpl_pose_stream << "timestamp,x,y,z,roll,pitch,yaw" << std::endl;
  #endif
@@ -214,12 +218,24 @@ int main(int argc, char** argv)
       continue;
     }
 
-    if(lidar_poses[lIdx].key == 0)
-    {
-      std::cout << "Can do interpolation but not key frame. Skipping.... " << std::endl;
-      file_count++;
-      continue;
-    }
+    // if(lidar_poses[lIdx].key == 0)
+    // {
+    //   std::cout << "Can do interpolation but not key frame. Skipping.... " << std::endl;
+    //   file_count++;
+    //   continue;
+    // }
+
+    // Output image
+    // char inFile[256], outFile[256];
+    // static int fc = 1;
+    // sprintf(inFile, "/home/zwu/9feb-datacollection/cam1/frame%04d.png", cIdx + 1);
+    // sprintf(outFile, "/home/zwu/9feb-datacollection/camera_frames/%04d.png", fc++);
+    // cv::Mat camImg = cv::imread(inFile);
+    // if(!cv::imwrite(outFile, camImg))
+    // {
+    //   std::cout << "Cannot write!" << std::endl;
+    //   return(-1);
+    // }
 
     // Do interpolation
     double interpolating_ratio = (camera_times[cIdx] - lidar_times[lIdx]) / (lidar_times[lIdx+1] - lidar_times[lIdx]);

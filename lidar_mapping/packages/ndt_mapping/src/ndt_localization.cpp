@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -43,14 +44,19 @@
 #endif
 
 #include <lidar_pcl/motion_undistortion.h>
+// #include <lidar_pcl/data_types.h>
 
 // Here are the functions I wrote. De-comment to use
+#define TILE_WIDTH 35
 #define MY_EXTRACT_SCANPOSE // do not use this, this is to extract scans and poses to close loop
 
 #ifdef MY_EXTRACT_SCANPOSE
 std::ofstream csv_stream;
 std::string csv_filename = "map_pose.csv";
 #endif // MY_EXTRACT_SCANPOSE
+
+typedef pcl::PointXYZI Point_t;
+typedef pcl::PointCloud<Point_t> Cloud_t;
 
 struct pose
 {
@@ -75,7 +81,7 @@ struct velocity
 // global variables
 static pose previous_pose, guess_pose, current_pose, ndt_pose, localizer_pose;
 static Eigen::Affine3d current_pose_tf, previous_pose_tf, relative_pose_tf;
-static ros::Publisher ndt_map_pub, current_scan_pub, original_scan_pub;
+static ros::Publisher local_map_pub, current_scan_pub, original_scan_pub;
 
 static ros::Time current_scan_time;
 static ros::Time previous_scan_time;
@@ -85,7 +91,11 @@ static double diff, diff_x, diff_y, diff_z, diff_roll, diff_pitch, diff_yaw; // 
 static double secs = 0.100085; // scan duration
 // static velocity current_velocity;
 
-static pcl::PointCloud<pcl::PointXYZI> world_map;
+// static pcl::PointCloud<pcl::PointXYZI> world_map;
+static std::unordered_map<Key, Cloud_t> world_map;
+static Cloud_t local_map;
+static Key previous_key;
+static std::mutex mtx;
 
 #ifdef USE_GPU_PCL
 static gpu::GNormalDistributionsTransform gpu_ndt;
@@ -123,6 +133,46 @@ std::tm* pnow = std::localtime(&process_begin);
 static inline double getYawAngle(double _x, double _y)
 {
   return std::atan2(_y, _x) * 180 / 3.14159265359; // degree value
+}
+
+static void update_local_map(pose local_pose)
+{
+  // Get local_key
+  Key local_key = {int(floor(local_pose.x / TILE_WIDTH)),  // .x
+                   int(floor(local_pose.y / TILE_WIDTH))}; // .y
+  // local_key.x = int(floor(local_pose.x / TILE_WIDTH));
+  // local_key.y = int(floor(local_pose.y / TILE_WIDTH));
+
+  // Only update local_map through world_map only if local_key changes
+  if(local_key != previous_key)
+  {
+    std::lock_guard<std::mutex> lck(mtx);
+    // Get local_map, a 3x3 tile map with the center being the local_key
+    local_map.clear();
+    Key tmp_key;
+    for(int x = local_key.x - 2, x_max = local_key.x + 2; x <= x_max; x++)
+      for(int y = local_key.y - 2, y_max = local_key.y + 2; y <= y_max; y++)
+      {
+        tmp_key.x = x;
+        tmp_key.y = y;
+        local_map += world_map[tmp_key];
+      }
+
+    // Update key and map
+    previous_key = local_key;
+    Cloud_t::Ptr local_map_ptr(new Cloud_t(local_map));
+  #ifdef USE_GPU_PCL
+    gpu_ndt.setInputTarget(local_map_ptr);
+  #else
+    ndt.setInputTarget(local_map_ptr);
+  #endif
+
+    sensor_msgs::PointCloud2 local_map_msg;
+    pcl::toROSMsg(*local_map_ptr, local_map_msg);
+    local_map_msg.header.frame_id = "map";
+    local_map_pub.publish(local_map_msg);
+    ROS_INFO("Local map changed.");
+  }
 }
 
 static void ndt_mapping_callback(const sensor_msgs::PointCloud2::ConstPtr& input)
@@ -318,6 +368,8 @@ static void ndt_mapping_callback(const sensor_msgs::PointCloud2::ConstPtr& input
   // std::cout << t_localizer << "\n";
   std::cout << "Callback took: " << std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1000.0 << "ms.\n";
   std::cout << "-----------------------------------------------------------------" << std::endl;
+
+  update_local_map(current_pose);
 }
 
 void mySigintHandler(int sig) // Publish the map/final_submap if node is terminated
@@ -401,6 +453,10 @@ int main(int argc, char** argv)
   private_nh.getParam("tf_pitch", _tf_pitch);
   private_nh.getParam("tf_yaw", _tf_yaw);
 
+  // guess_pose.x -= _tf_x;
+  // guess_pose.y -= _tf_y;
+  // guess_pose.z -= _tf_z;
+
   previous_pose.y = guess_pose.x;
   previous_pose.x = guess_pose.y;
   previous_pose.z = guess_pose.z;
@@ -444,19 +500,19 @@ int main(int argc, char** argv)
 
   ros::NodeHandle nh;
   signal(SIGINT, mySigintHandler);
-  ros::Subscriber pcl_sub = nh.subscribe("/points_raw", 10, ndt_mapping_callback);
+  ros::Subscriber pcl_sub = nh.subscribe("/points_raw", 1000, ndt_mapping_callback);
 
   if(_namespace.size() > 0)
   {
-    ndt_map_pub = nh.advertise<sensor_msgs::PointCloud2>(_namespace + "/world_map", 1, true);
-    current_scan_pub = nh.advertise<sensor_msgs::PointCloud2>(_namespace + "/current_scan", 1, true);
-    original_scan_pub = nh.advertise<sensor_msgs::PointCloud2>(_namespace + "/source_scan", 1, true);
+    local_map_pub = nh.advertise<sensor_msgs::PointCloud2>(_namespace + "/local_map", 10, true);
+    current_scan_pub = nh.advertise<sensor_msgs::PointCloud2>(_namespace + "/current_scan", 10, true);
+    original_scan_pub = nh.advertise<sensor_msgs::PointCloud2>(_namespace + "/source_scan", 10, true);
   }
   else
   {
-    ndt_map_pub = nh.advertise<sensor_msgs::PointCloud2>(_namespace + "/world_map", 1, true);
-    current_scan_pub = nh.advertise<sensor_msgs::PointCloud2>("/current_scan", 1, true);
-    original_scan_pub = nh.advertise<sensor_msgs::PointCloud2>("/source_scan", 1, true);
+    local_map_pub = nh.advertise<sensor_msgs::PointCloud2>(_namespace + "/local_map", 10, true);
+    current_scan_pub = nh.advertise<sensor_msgs::PointCloud2>("/current_scan", 10, true);
+    original_scan_pub = nh.advertise<sensor_msgs::PointCloud2>("/source_scan", 10, true);
   }
 
   try
@@ -470,7 +526,7 @@ int main(int argc, char** argv)
   }
 
   // Get target world map
-  if(pcl::io::loadPCDFile<pcl::PointXYZI>(_map, world_map) == -1)
+  if(pcl::io::loadPCDFile<pcl::PointXYZI>(_map, local_map) == -1)
   {
     std::cout << "ERROR: Couldn't read " << _map << "." << std::endl;
     return(-1);
@@ -478,24 +534,44 @@ int main(int argc, char** argv)
   else
     std::cout << _map << " loaded." << std::endl;
 
-  pcl::PointCloud<pcl::PointXYZI>::Ptr world_map_ptr(new pcl::PointCloud<pcl::PointXYZI>(world_map));
-  sensor_msgs::PointCloud2 ndt_map_msg;
-  pcl::toROSMsg(*world_map_ptr, ndt_map_msg);
-  ndt_map_msg.header.frame_id = "map";
-  ndt_map_pub.publish(ndt_map_msg);
+  for(pcl::PointCloud<pcl::PointXYZI>::const_iterator item = local_map.begin(); item < local_map.end(); item++)
+  {
+    // Get 2D point
+    Key key;
+    key.x = int(floor(item->x / TILE_WIDTH));
+    key.y = int(floor(item->y / TILE_WIDTH));
+
+    world_map[key].push_back(*item);
+  }
+
+  // Update local_map for the first time
+  previous_key = Key{int(floor(current_pose.x / TILE_WIDTH)), int(floor(current_pose.y / TILE_WIDTH))};
+  local_map.clear();
+  for(int x = previous_key.x - 2, x_max = previous_key.x + 2; x <= x_max; x++)
+    for(int y = previous_key.y - 2, y_max = previous_key.y + 2; y <= y_max; y++)
+    {
+      Key tmp_key = {x, y};
+      local_map += world_map[tmp_key];
+    }
+
+  Cloud_t::Ptr local_map_ptr(new Cloud_t(local_map));
+  sensor_msgs::PointCloud2 local_map_msg;
+  pcl::toROSMsg(*local_map_ptr, local_map_msg);
+  local_map_msg.header.frame_id = "map";
+  local_map_pub.publish(local_map_msg);
 
 #ifdef USE_GPU_PCL
   gpu_ndt.setTransformationEpsilon(trans_eps);
   gpu_ndt.setStepSize(step_size);
   gpu_ndt.setResolution(ndt_res);
   gpu_ndt.setMaximumIterations(max_iter);
-  gpu_ndt.setInputTarget(world_map_ptr);
+  gpu_ndt.setInputTarget(local_map_ptr);
 #else
   ndt.setTransformationEpsilon(trans_eps);
   ndt.setStepSize(step_size);
   ndt.setResolution(ndt_res);
   ndt.setMaximumIterations(max_iter);
-  ndt.setInputTarget(world_map_ptr);
+  ndt.setInputTarget(local_map_ptr);
 #endif
 
   Eigen::Translation3f tl_btol(_tf_x, _tf_y, _tf_z);                 // tl: translation
@@ -515,6 +591,7 @@ int main(int argc, char** argv)
   csv_stream << "key,sequence,sec,nsec,x,y,z,roll,pitch,yaw" << std::endl;
 #endif // MY_EXTRACT_SCANPOSE
 
+  std::cout << "Start processing incoming clouds... " << std::endl;
   ros::spin();
   return 0;
 }

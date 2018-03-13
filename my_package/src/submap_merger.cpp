@@ -206,7 +206,7 @@ int main(int argc, char** argv)
   {
     // std::cout << "Please indicate the bag file corresponding to the map_pose.csv." << std::endl;
     std::cout << "ERROR: Missing user inputs." << std::endl;
-    std::cout << "!! rosrun my_package submap_merger \"posefile.csv\" \"bagfile.bag\" [min_scan_range]" << std::endl;
+    std::cout << "!! rosrun my_package submap_merger \"POSEFILE.csv\" \"BAGFILE.bag\" [min_scan_range]" << std::endl;
     return -1;
   }
   std::string bagfile = argv[2];

@@ -2,8 +2,8 @@
 <launch>
 
   <!-- send table.xml to param server -->
-  <arg name="map" default="/home/echo/9feb_lidar/0.10_8jan-carpark2.pcd" />
-  <arg name="namespace" default="" /> <!-- set to do multiple mapping at once -->
+  <arg name="map" default="/home/zwu/LIDAR-DATA/3oct-around-pana1.pcd" />
+  <arg name="namespace" default="bedok_localization" /> <!-- set to do multiple mapping at once -->
   <arg name="output_directory" default="$(env HOME)/ndt_custom/$(arg namespace)/" />
 
   <!-- ndt algorithm params -->
@@ -17,17 +17,19 @@
   <arg name="min_add_scan_yaw_diff" default="0.013" />
 
   <!-- initial pose TODO: add GNSS when available T.T -->
-  <arg name="intial_x" default="-1.0535" />
-  <arg name="intial_y" default="-3.4359" />
-  <arg name="intial_z" default="-0.4573" />
-  <arg name="intial_roll" default="0.0551" />
-  <arg name="intial_pitch" default="-0.0017" />
-  <arg name="intial_yaw" default="0.1786" />
+  <arg name="initial_x" default="-70.2406" />
+  <arg name="initial_y" default="10.4873" />
+  <arg name="initial_z" default="3.0330" />
+  <arg name="initial_roll" default="-0.0380" />
+  <arg name="initial_pitch" default="-0.0360" />
+  <arg name="initial_yaw" default="2.8090" />
   
   <!-- tf from lidar frame to car frame -->
   <arg name="tf_x" default="1.2"/>
+  <!-- <arg name="tf_x" default="0.0"/> -->
   <arg name="tf_y" default="0.0"/>
   <arg name="tf_z" default="2.0"/>
+  <!-- <arg name="tf_z" default="0.0"/> -->
   <arg name="tf_roll" default="0.0"/>
   <arg name="tf_pitch" default="0.0"/>
   <arg name="tf_yaw" default="0.0"/>
@@ -47,12 +49,19 @@
   	<param name="min_add_scan_shift" value="$(arg min_add_scan_shift)" />
     <param name="min_add_scan_yaw_diff" value="$(arg min_add_scan_yaw_diff)" />
   	
-  	<param name="tf_x" value="$(arg tf_x)" />
-  	<param name="tf_y" value="$(arg tf_y)" />
-  	<param name="tf_z" value="$(arg tf_z)" />
-  	<param name="tf_roll" value="$(arg tf_roll)" />
-  	<param name="tf_pitch" value="$(arg tf_pitch)" />
-  	<param name="tf_yaw" value="$(arg tf_yaw)" />
+    <param name="initial_x"      value="$(arg initial_x)" />
+  	<param name="initial_y"      value="$(arg initial_y)" />
+  	<param name="initial_z"      value="$(arg initial_z)" />
+  	<param name="initial_roll"   value="$(arg initial_roll)" />
+  	<param name="initial_pitch"  value="$(arg initial_pitch)" />
+  	<param name="initial_yaw"    value="$(arg initial_yaw)" />
+
+  	<param name="tf_x"      value="$(arg tf_x)" />
+  	<param name="tf_y"      value="$(arg tf_y)" />
+  	<param name="tf_z"      value="$(arg tf_z)" />
+  	<param name="tf_roll"   value="$(arg tf_roll)" />
+  	<param name="tf_pitch"  value="$(arg tf_pitch)" />
+  	<param name="tf_yaw"    value="$(arg tf_yaw)" />
   </node>
   
 </launch>
