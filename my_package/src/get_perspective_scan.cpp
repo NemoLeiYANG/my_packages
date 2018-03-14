@@ -64,8 +64,8 @@ int main(int argc, char** argv)
   // Load input
   // std::string filename = argv[1];
   // std::string cloudfile = "/home/zwu/demo_data/0.10_8jan-carpark2.pcd";
-  std::string cloudfile = "/home/zwu/LIDAR-DATA/3oct-ds.pcd";
-  std::string posefile = "/home/zwu/23feb_data/5/ndt_matching.csv"; // localizing_pose
+  std::string cloudfile = "/home/zwu/LIDAR-DATA/7mar-abcarpark.pcd";
+  std::string posefile = "/home/zwu/13mar_data/park-ab/map_pose.csv"; // localizing_pose
   std::string camerafile = "/home/zwu/23feb_data/5/timestamp.txt"; // cam timestamp
   std::string file_location = "/home/zwu/23feb_data/5/lidar_scan/"; // output dir
  #ifdef OFFSET_TRANSFORM

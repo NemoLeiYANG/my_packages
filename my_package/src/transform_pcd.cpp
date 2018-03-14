@@ -96,7 +96,7 @@ void ndtMapCb(const sensor_msgs::PointCloud2::ConstPtr& input_msg)
     ndt.setTransformationEpsilon(0.005);
 		ndt.setStepSize(0.01);
 		ndt.setResolution(1.2);
-		ndt.setMaximumIterations(100);
+		ndt.setMaximumIterations(500);
 		ndt.setInputTarget(global_map_ptr);
     has_map_cloud = true;
     std::cout << "Map loaded!" << std::endl;

@@ -2,10 +2,10 @@
 <launch>
 
   <!-- send table.xml to param server -->
-  <arg name="bag" default="$(env HOME)/23jan-datacollection/lidar_data/23jan-round1.bag" />
+  <arg name="bag" default="$(env HOME)/7mar-datacollection/tube.bag" />
   <arg name="start_time" default="0" /> <!-- all timings are in seconds -->
   <arg name="play_duration" default="-1" /> <!-- set negative to play all -->
-  <arg name="namespace" default="aroundtheworld" /> <!-- set to do multiple mapping at once -->
+  <arg name="namespace" default="tube" /> <!-- set to do multiple mapping at once -->
   <arg name="output_directory" default="$(env HOME)/ndt_custom/$(arg namespace)/" />
 
   <!-- ndt algorithm params -->
