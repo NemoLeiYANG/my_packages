@@ -2,16 +2,16 @@
 <launch>
 
   <!-- send table.xml to param server -->
-  <arg name="map" default="/home/zwu/LIDAR-DATA/3oct-around-pana1.pcd" />
+  <arg name="map" default="/home/zwu/LIDAR-DATA/3oct-ds.pcd" />
   <arg name="namespace" default="bedok_localization" /> <!-- set to do multiple mapping at once -->
   <arg name="output_directory" default="$(env HOME)/ndt_custom/$(arg namespace)/" />
 
   <!-- ndt algorithm params -->
-  <arg name="resolution" default="1.2"/> 
+  <arg name="resolution" default="2.5"/> 
   <arg name="step_size" default="0.05"/>
   <arg name="transformation_epsilon" default="0.0001"/>
   <arg name="max_iteration" default="100" />
-  <arg name="voxel_leaf_size" default="2.5" />
+  <arg name="voxel_leaf_size" default="0.1" />
   <arg name="min_scan_range" default="3.2" />
   <arg name="min_add_scan_shift" default="0.5" />  
   <arg name="min_add_scan_yaw_diff" default="0.013" />
@@ -25,17 +25,17 @@
   <arg name="initial_yaw" default="2.8090" />
   
   <!-- tf from lidar frame to car frame -->
-  <arg name="tf_x" default="1.2"/>
-  <!-- <arg name="tf_x" default="0.0"/> -->
+  <!-- <arg name="tf_x" default="1.2"/> -->
+  <arg name="tf_x" default="0.0"/>
   <arg name="tf_y" default="0.0"/>
-  <arg name="tf_z" default="2.0"/>
-  <!-- <arg name="tf_z" default="0.0"/> -->
+  <!-- <arg name="tf_z" default="2.0"/> -->
+  <arg name="tf_z" default="0.0"/>
   <arg name="tf_roll" default="0.0"/>
   <arg name="tf_pitch" default="0.0"/>
   <arg name="tf_yaw" default="0.0"/>
 
 <!-- rosrun ndt_localizer ndt_mapping  -->
-  <node pkg="ndt_mapping" type="ndt_localization" name="ndt_localization_$(arg namespace)" output="screen">
+  <node pkg="ndt_mapping" type="ndt_localization" name="ndt_localization" output="screen" ns="$(arg namespace)" >
   	<param name="map" value="$(arg map)" />
     <param name="namespace" value="$(arg namespace)" />
     <param name="output_directory" value="$(arg output_directory)" />
@@ -63,5 +63,7 @@
   	<param name="tf_pitch"  value="$(arg tf_pitch)" />
   	<param name="tf_yaw"    value="$(arg tf_yaw)" />
   </node>
+
+  <!-- <node pkg="tf" type="static_transform_publisher" name="baselink_velodyne_transform" args="0 0 0 0 0 0 /base_link /velodyne 10"/> -->
   
 </launch>

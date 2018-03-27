@@ -1,38 +1,33 @@
 #include <ros/ros.h>
-// #include <dynamic_reconfigure/server.h>
 #include <sensor_msgs/PointCloud2.h>
-// #include <my_package/transformPointsConfig.h>
 
 #include <pcl/io/io.h>
 #include <pcl/io/pcd_io.h>
-// #include <pcl/io/ply_io.h>
-// #include <pcl/point_cloud.h>
 #include <pcl/common/common.h>
-// #include <pcl/common/angles.h>
 #include <pcl/common/transforms.h>
 #include <pcl_conversions/pcl_conversions.h>
-// #include <pcl/point_types.h>
-// #include <pcl/conversions.h>
-// #include <pcl_ros/transforms.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/kdtree/kdtree_flann.h>
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
+#include <cmath>
 #include <iostream>
 #include <fstream>
-// #include <sstream>
 #include <string>
 #include <vector>
 
 #define OUTPUT_INTERPOLATED_POSE // to a csv file
 // #define VOXEL_GRID_OCCLUSION // do not enable
-#define OFFSET_TRANSFORM // Only enable for 6cams-Lidar32E-PX2 system!!
+// #define OFFSET_TRANSFORM
 
 #ifdef VOXEL_GRID_OCCLUSION
 #include <pcl/filters/voxel_grid_occlusion_estimation.h>
 #endif
+
+typedef pcl::PointXYZI Point_t;
+typedef pcl::PointCloud<Point_t> Cloud_t;
 
 struct pose
 {
@@ -42,7 +37,6 @@ struct pose
   double roll;
   double pitch;
   double yaw;
-  int key;
 };
 
 inline double calculateMinAngleDist(double first, double second) // in radian
@@ -55,25 +49,70 @@ inline double calculateMinAngleDist(double first, double second) // in radian
   return difference;
 }
 
+void occlusionFilter(Cloud_t &in_cloud)
+{
+  // Spherical voxel properties: r: 0->50(500), azi: 0->2 PI (400), elev: -PI/2->PI/2 (100)
+  const double PI = 3.141592653589793238;
+  const double del_r2 = 12.5;         // radial distance
+  const double del_theta = PI / 200;     // azimuth angle
+  const double del_phi = PI / 200;  // elevation angle
+  const int r_size = 200;
+  const int theta_size = 400;
+  const int phi_size = 200;
+  std::vector<std::vector<std::vector<int>>> state_matrix(r_size, std::vector<std::vector<int>>(theta_size, std::vector<int>(phi_size)));
+  std::vector<std::vector<std::vector<Cloud_t>>> cloud_matrix(r_size, std::vector<std::vector<Cloud_t>>(theta_size, std::vector<Cloud_t>(phi_size)));
+
+  // Spherical voxel allocation and occlusion denial
+  for(pcl::PointCloud<pcl::PointXYZI>::const_iterator item = in_cloud.begin(); item < in_cloud.end(); item++)
+  { 
+    int i = int((item->x * item->x + item->y * item->y + item->z * item->z) / del_r2);
+    int j = int((std::atan2(item->y, item->x) + PI) / del_theta);
+    int k = int((std::atan2(item->z, sqrt(item->x * item->x + item->y * item->y)) + PI/2) / del_phi);
+    if(i >= r_size) i = r_size - 1;
+    if(j >= theta_size) j = theta_size - 1;
+    if(k >= phi_size) k = phi_size - 1;
+    if(i < 0 || j < 0 || k < 0 || i >= r_size || j >= theta_size || k >= phi_size)
+    {
+      printf("Errorous index! (%d, %d, %d)\n", i, j, k);
+      return;
+    }
+    
+    state_matrix[i][j][k] = 1;
+    cloud_matrix[i][j][k].push_back(*item);
+  }
+
+  Cloud_t out_cloud;
+  for(int j = 0; j < theta_size; j++) for(int k = 0; k < phi_size; k++)
+  {
+    for(int i = 0; i < r_size; i++)
+      if(state_matrix[i][j][k] == 1 && cloud_matrix[i][j][k].size() > 2)
+      {
+        out_cloud += cloud_matrix[i][j][k];
+        break;
+      }
+  }
+
+  in_cloud.clear();
+  in_cloud = out_cloud;
+  return;
+}
+
 int main(int argc, char** argv)
 {
-  ros::init(argc, argv, "get_perspective_full_map");
+  ros::init(argc, argv, "get_perspective_scan");
   ros::NodeHandle nh;
-  ros::Publisher scan_pub = nh.advertise<sensor_msgs::PointCloud2>("/my_scan", 100, true);
+  ros::Publisher scan_pub = nh.advertise<sensor_msgs::PointCloud2>("/interpolated_scan", 100, true);
   
   // Load input
   // std::string filename = argv[1];
-  // std::string cloudfile = "/home/zwu/demo_data/0.10_8jan-carpark2.pcd";
-  std::string cloudfile = "/home/zwu/LIDAR-DATA/7mar-abcarpark.pcd";
-  std::string posefile = "/home/zwu/13mar_data/park-ab/map_pose.csv"; // localizing_pose
-  std::string camerafile = "/home/zwu/23feb_data/5/timestamp.txt"; // cam timestamp
-  std::string file_location = "/home/zwu/23feb_data/5/lidar_scan/"; // output dir
+  std::string cloudfile = "/home/zwu/demo_data/0.10_8jan-carpark2.pcd";
+  // std::string cloudfile = "/home/zwu/LIDAR-DATA/8jan-carpark2.pcd";
+  std::string posefile = "/home/zwu/9feb-datacollection/localizing_pose.csv"; // localizing_pose
+  std::string camerafile = "/home/zwu/9feb-datacollection/timestamp.txt"; // cam timestamp
+  std::string file_location = "/home/zwu/9feb-datacollection/lidar_occlusion_input/"; // output dir
  #ifdef OFFSET_TRANSFORM
   Eigen::Affine3d offset_tf;
   pcl::getTransformation(0, 0, 0, -0.02, 0, -0.01, offset_tf);
-  Eigen::Affine3d lidar_baselink_tf;
-  pcl::getTransformation(1.2, 0, 2.0, 0, 0, 0, lidar_baselink_tf);
-  offset_tf = offset_tf * lidar_baselink_tf.inverse();
  #endif
 
   pcl::PointCloud<pcl::PointXYZI> src;
@@ -85,12 +124,12 @@ int main(int argc, char** argv)
   std::cout << "Loaded " << src.size() << " data points from " << cloudfile << std::endl;
   
   // Downsample the source cloud, apply voxelgrid filter
-  double voxel_leaf_size = 0.3;
-  pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr(new pcl::PointCloud<pcl::PointXYZI>(src));
-  pcl::VoxelGrid<pcl::PointXYZI> voxel_grid_filter;
-  voxel_grid_filter.setLeafSize(voxel_leaf_size, voxel_leaf_size, voxel_leaf_size);
-  voxel_grid_filter.setInputCloud(src_ptr);
-  voxel_grid_filter.filter(src);
+  // double voxel_leaf_size = 0.3;
+  // pcl::PointCloud<pcl::PointXYZI>::Ptr src_ptr(new pcl::PointCloud<pcl::PointXYZI>(src));
+  // pcl::VoxelGrid<pcl::PointXYZI> voxel_grid_filter;
+  // voxel_grid_filter.setLeafSize(voxel_leaf_size, voxel_leaf_size, voxel_leaf_size);
+  // voxel_grid_filter.setInputCloud(src_ptr);
+  // voxel_grid_filter.filter(src);
 
   // And set up KDTree
   pcl::PointCloud<pcl::PointXYZ> tmp_xyz;
@@ -111,18 +150,17 @@ int main(int argc, char** argv)
   pose_stream.open(posefile);
 
   // Place-holder for csv stream variables
-  std::string line, key_str, seq_str, sec_str, nsec_str, x_str, y_str, z_str, roll_str, pitch_str, yaw_str;
+  std::string line, seq_str, sec_str, nsec_str, x_str, y_str, z_str, roll_str, pitch_str, yaw_str;
   std::vector<double> lidar_times;
   std::vector<pose> lidar_poses;
   getline(pose_stream, line);
   std::cout << "File sequence: " << line << std::endl;
-  std::cout << "Expected sequence: key,seq,sec,nsec,x,y,z,roll,pitch,yaw" << std::endl;
   std::cout << "Collecting localized lidar poses and time stamps." << std::endl;
   const double lidar_time_offset = -2.1;
 
  #ifdef OUTPUT_INTERPOLATED_POSE
   std::ofstream intrpl_pose_stream;
-  std::string intrpl_pose_file = "/home/zwu/23feb_data/5/interpolated_pose.csv";
+  std::string intrpl_pose_file = "/home/zwu/9feb-datacollection/new_pose.csv";
   intrpl_pose_stream.open(intrpl_pose_file);
   intrpl_pose_stream << "timestamp,x,y,z,roll,pitch,yaw" << std::endl;
  #endif
@@ -132,7 +170,7 @@ int main(int argc, char** argv)
     std::stringstream line_stream(line);
 
     // Get data value
-    getline(line_stream, key_str, ',');
+    getline(line_stream, seq_str, ',');
     getline(line_stream, seq_str, ',');
     getline(line_stream, sec_str, ',');
     getline(line_stream, nsec_str, ',');
@@ -152,8 +190,7 @@ int main(int argc, char** argv)
                            tf_vtow);
 
     pose current_pose({std::stod(x_str), std::stod(y_str), std::stod(z_str),
-                       std::stod(roll_str), std::stod(pitch_str), std::stod(yaw_str),
-                       std::stoi(key_str)});
+                       std::stod(roll_str), std::stod(pitch_str), std::stod(yaw_str)});
 
     lidar_poses.push_back(current_pose);
   }
@@ -218,25 +255,6 @@ int main(int argc, char** argv)
       continue;
     }
 
-    // if(lidar_poses[lIdx].key == 0)
-    // {
-    //   std::cout << "Can do interpolation but not key frame. Skipping.... " << std::endl;
-    //   file_count++;
-    //   continue;
-    // }
-
-    // Output image
-    // char inFile[256], outFile[256];
-    // static int fc = 1;
-    // sprintf(inFile, "/home/zwu/9feb-datacollection/cam1/frame%04d.png", cIdx + 1);
-    // sprintf(outFile, "/home/zwu/9feb-datacollection/camera_frames/%04d.png", fc++);
-    // cv::Mat camImg = cv::imread(inFile);
-    // if(!cv::imwrite(outFile, camImg))
-    // {
-    //   std::cout << "Cannot write!" << std::endl;
-    //   return(-1);
-    // }
-
     // Do interpolation
     double interpolating_ratio = (camera_times[cIdx] - lidar_times[lIdx]) / (lidar_times[lIdx+1] - lidar_times[lIdx]);
     pose interpolating_pose({lidar_poses[lIdx].x + interpolating_ratio * pose_diff.x,
@@ -290,6 +308,9 @@ int main(int argc, char** argv)
 
     pcl::PointCloud<pcl::PointXYZI>::Ptr localCloud(new pcl::PointCloud<pcl::PointXYZI>());
     pcl::transformPointCloud(nearestCloud, *localCloud, transform.inverse());
+
+    // Do occlusion filtering
+    occlusionFilter(*localCloud);
 
    #ifdef VOXEL_GRID_OCCLUSION
     // Set up voxel_grid_occlusion_estimation

@@ -2,10 +2,10 @@
 <launch>
 
   <!-- send table.xml to param server -->
-  <arg name="bag" default="$(env HOME)/7mar-datacollection/tube.bag" />
+  <arg name="bag" default="/home/zwu/data-0320/round2/20mar-round2-f.bag" />
   <arg name="start_time" default="0" /> <!-- all timings are in seconds -->
   <arg name="play_duration" default="-1" /> <!-- set negative to play all -->
-  <arg name="namespace" default="tube" /> <!-- set to do multiple mapping at once -->
+  <arg name="namespace" default="round2f" /> <!-- set to do multiple mapping at once -->
   <arg name="output_directory" default="$(env HOME)/ndt_custom/$(arg namespace)/" />
 
   <!-- ndt algorithm params -->
@@ -19,9 +19,9 @@
   <arg name="min_add_scan_yaw_diff" default="0.013" />
   
   <!-- tf from lidar frame to car frame -->
-  <arg name="tf_x" default="1.2"/>
+  <arg name="tf_x" default="0.0"/>
   <arg name="tf_y" default="0.0"/>
-  <arg name="tf_z" default="2.0"/>
+  <arg name="tf_z" default="0.0"/>
   <arg name="tf_roll" default="0.0"/>
   <arg name="tf_pitch" default="0.0"/>
   <arg name="tf_yaw" default="0.0"/>

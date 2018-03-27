@@ -11,7 +11,8 @@ if __name__=='__main__':
 	# import data
 	# [file name, color, label, linestyle, linewidth]
 	file = [
-					['/home/zwu/9feb-datacollection/maxima_pose.csv', 'r', 'ongoing', '-', 1],
+					['/home/zwu/data-0323/round1/ndt_matching.csv', 'r', '1', '-', 1],
+					['/home/zwu/data-0323/round2/ndt_matching.csv', 'g', '1', '-', 1],
 				 ]
 	data = [pd.read_csv(element[0]) for element in file]
 

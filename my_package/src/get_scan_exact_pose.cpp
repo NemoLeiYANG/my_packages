@@ -1,5 +1,5 @@
-#include <ros/ros.h>
-#include <sensor_msgs/PointCloud2.h>
+// #include <ros/ros.h>
+// #include <sensor_msgs/PointCloud2.h>
 
 #include <pcl/io/io.h>
 #include <pcl/io/pcd_io.h>
@@ -43,9 +43,10 @@ inline double calculateMinAngleDist(double first, double second) // in radian
 int main(int argc, char** argv)
 {
   // Load input
-  std::string cloudfile = "/home/zwu/LIDAR-DATA/7mar-abpark.pcd";
-  std::string posefile = "/home/zwu/13mar_data/park-ab/map_pose.csv"; // localizing_pose
-  std::string file_location = "/home/zwu/13mar_data/park-ab/lidar_scan/"; // output dir
+  std::string cloudfile = "/home/zwu/LIDAR-DATA/7mar-tube.pcd"; // pointcloud map
+  std::string posefile = "/home/zwu/data-0321/tube/stairs-1/pose.csv"; // localizing_pose
+  std::string file_location = "/home/zwu/data-0321/tube/stairs-1/lidar_scan/"; // output dir
+  unsigned int start_index = 1;
 
   pcl::PointCloud<pcl::PointXYZI> src;
   if(pcl::io::loadPCDFile<pcl::PointXYZI>(cloudfile, src) == -1)
@@ -83,11 +84,10 @@ int main(int argc, char** argv)
 
   // Place-holder for csv stream variables
   std::string line, key_str, seq_str, sec_str, nsec_str, x_str, y_str, z_str, roll_str, pitch_str, yaw_str;
-  std::vector<double> lidar_times;
   std::vector<pose> lidar_poses;
-  getline(pose_stream, line);
-  std::cout << "File sequence: " << line << std::endl;
-  std::cout << "Expected sequence: key,seq,sec,nsec,x,y,z,roll,pitch,yaw" << std::endl;
+  // getline(pose_stream, line); // skip header line
+  // std::cout << "File sequence: " << line << std::endl;
+  std::cout << "Expected sequence: x,y,z,roll,pitch,yaw" << std::endl;
   std::cout << "Collecting localized lidar poses and time stamps." << std::endl;
   
   #ifdef OFFSET_TO_BASE
@@ -100,10 +100,6 @@ int main(int argc, char** argv)
     std::stringstream line_stream(line);
 
     // Get data value
-    getline(line_stream, key_str, ',');
-    getline(line_stream, seq_str, ',');
-    getline(line_stream, sec_str, ',');
-    getline(line_stream, nsec_str, ',');
     getline(line_stream, x_str, ',');
     getline(line_stream, y_str, ',');
     getline(line_stream, z_str, ',');
@@ -111,9 +107,6 @@ int main(int argc, char** argv)
     getline(line_stream, pitch_str, ',');
     getline(line_stream, yaw_str);
 
-    double current_time = std::stod(sec_str) + std::stod(nsec_str) / 1e9; // in seconds
-    // std::cout << std::fixed << std::setprecision(9) << current_time << std::endl;
-    lidar_times.push_back(current_time);
     Eigen::Affine3d tf_vtow;
     pcl::getTransformation(std::stod(x_str), std::stod(y_str), std::stod(z_str),
                            std::stod(roll_str), std::stod(pitch_str), std::stod(yaw_str),
@@ -125,12 +118,12 @@ int main(int argc, char** argv)
     lidar_poses.push_back(current_pose);
   }
   pose_stream.close();
-  std::cout << "INFO: Collected " << lidar_times.size() << " data." << std::endl;
+  std::cout << "INFO: Collected " << lidar_poses.size() << " data." << std::endl;
 
   /////////////////////////////////////////////////////////////////////////////////////////////////////////
   // Do interpolation and publish the synthetic perspective pointcloud
-  unsigned int file_count = 0;
-  for(unsigned int lIdx = 0, lIdx_end = lidar_times.size(); lIdx < lIdx_end; lIdx++)
+  unsigned int file_count = start_index;
+  for(unsigned int lIdx = 0, lIdx_end = lidar_poses.size(); lIdx < lIdx_end; lIdx++)
   {
     // Search around interpolated point for cloud
     // K nearest neighbor search
