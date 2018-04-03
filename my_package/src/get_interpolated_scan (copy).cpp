@@ -34,8 +34,6 @@
 #include <pcl/filters/voxel_grid_occlusion_estimation.h>
 #endif
 
-using namespace std;
-
 struct pose
 {
   double x;
@@ -67,9 +65,9 @@ int main(int argc, char** argv)
   
   // Load input
   std::string cloudfile = "/home/zwu/LIDAR-DATA/3oct-ds.pcd"; // pointcloud map
-  std::string posefile = "/home/zwu/data-0323/round1/ndt_matching.csv"; // localizing_pose
-  std::string camerafile = "/home/zwu/data-0323/round1/timestamp.txt"; // cam timestamp
-  std::string file_location = "/home/zwu/data-0323/round1/lidar_scan/"; // output dir
+  std::string posefile = "/home/zwu/12mar_data/rgb-lidar/round2/localizing_pose.csv"; // localizing_pose
+  std::string camerafile = "/home/zwu/12mar_data/rgb-lidar/round2/timestamp.txt"; // cam timestamp
+  std::string file_location = "/home/zwu/23feb_data/5/lidar_scan/"; // output dir
   unsigned int start_index = 1;
   
  #ifdef OFFSET_TRANSFORM
@@ -118,14 +116,14 @@ int main(int argc, char** argv)
   std::vector<double> lidar_times;
   std::vector<pose> lidar_poses;
   getline(pose_stream, line);
-  // std::cout << "File sequence: " << line << std::endl;
+  std::cout << "File sequence: " << line << std::endl;
   std::cout << "Expected sequence: key,seq,sec,nsec,x,y,z,roll,pitch,yaw" << std::endl;
   std::cout << "Collecting localized lidar poses and time stamps." << std::endl;
-  const double lidar_time_offset = -1.835; //-2.1; // -1.85; w/ offset tf
+  const double lidar_time_offset = -2.1; //-2.1; // -1.85; w/ offset tf
 
  #ifdef OUTPUT_INTERPOLATED_POSE
   std::ofstream intrpl_pose_stream;
-  std::string intrpl_pose_file = "/home/zwu/data-0323/round1/interpolated_pose.csv";
+  std::string intrpl_pose_file = "/home/zwu/12mar_data/rgb-lidar/round2/interpolated_pose.csv";
   intrpl_pose_stream.open(intrpl_pose_file);
   intrpl_pose_stream << "timestamp,x,y,z,roll,pitch,yaw" << std::endl;
  #endif
@@ -147,9 +145,9 @@ int main(int argc, char** argv)
     getline(line_stream, yaw_str);
 
     double current_time = std::stod(sec_str) + std::stod(nsec_str) / 1e9; // in seconds
+    // std::cout << std::fixed << std::setprecision(9) << current_time << std::endl;
     lidar_times.push_back(current_time + lidar_time_offset);
     Eigen::Affine3d tf_vtow;
-    
     pcl::getTransformation(std::stod(x_str), std::stod(y_str), std::stod(z_str),
                            std::stod(roll_str), std::stod(pitch_str), std::stod(yaw_str),
                            tf_vtow);
@@ -344,27 +342,27 @@ int main(int argc, char** argv)
    #endif // ROS_PUBLISH
 
     // Convert pointcloud to txt file and save
-    std::ofstream pointcloud_stream;
-    pointcloud_stream.open(file_location + std::to_string(file_count) + ".txt");
-   #ifdef OFFSET_TRANSFORM
-    pcl::PointCloud<pcl::PointXYZI> localCloudOffset;
-    pcl::transformPointCloud(*localCloud, localCloudOffset, offset_tf);
-    for(pcl::PointCloud<pcl::PointXYZI>::const_iterator item = localCloudOffset.begin(); item != localCloudOffset.end(); item++)
-   #else
-    for(pcl::PointCloud<pcl::PointXYZI>::const_iterator item = localCloud->begin(); item != localCloud->end(); item++)
-   #endif
-    {
-      char output_buffer[1000];
-      double x = item->x;
-      double y = item->y;
-      double z = item->z;
-      int intensity = item->intensity;
-      sprintf(output_buffer, "%.10lf %.10lf %.10lf %d", x, y, z, intensity);
-      pointcloud_stream << output_buffer << std::endl;
-    }
-    std::cout << "Saved " << localCloud->size() << " points to " + file_location + std::to_string(file_count) + ".txt" << std::endl;
-    std::cout << "---------------------------------------------------------" << std::endl;
-    file_count++;
+  //   std::ofstream pointcloud_stream;
+  //   pointcloud_stream.open(file_location + std::to_string(file_count) + ".txt");
+  //  #ifdef OFFSET_TRANSFORM
+  //   pcl::PointCloud<pcl::PointXYZI> localCloudOffset;
+  //   pcl::transformPointCloud(*localCloud, localCloudOffset, offset_tf);
+  //   for(pcl::PointCloud<pcl::PointXYZI>::const_iterator item = localCloudOffset.begin(); item != localCloudOffset.end(); item++)
+  //  #else
+  //   for(pcl::PointCloud<pcl::PointXYZI>::const_iterator item = localCloud->begin(); item != localCloud->end(); item++)
+  //  #endif
+  //   {
+  //     char output_buffer[1000];
+  //     double x = item->x;
+  //     double y = item->y;
+  //     double z = item->z;
+  //     int intensity = item->intensity;
+  //     sprintf(output_buffer, "%.10lf %.10lf %.10lf %d", x, y, z, intensity);
+  //     pointcloud_stream << output_buffer << std::endl;
+  //   }
+  //   std::cout << "Saved " << localCloud->size() << " points to " + file_location + std::to_string(file_count) + ".txt" << std::endl;
+  //   std::cout << "---------------------------------------------------------" << std::endl;
+  //   file_count++;
   }
   // ros::spin();
   return 0;

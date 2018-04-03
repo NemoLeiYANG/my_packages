@@ -52,9 +52,9 @@
 int main(int argc, char** argv)
 { 
   // Input data 
-  std::string bagfile = "/home/zwu/9feb-datacollection/9feb-carpark2-orig.bag";
-  std::string camerafile = "/home/zwu/9feb-datacollection/timestamp.txt";
-  std::string output_dir = "/home/zwu/9feb-datacollection/lidar_scan_input_offset/";
+  std::string bagfile = "/home/zwu/data-0323/round1/23mar-round1f.bag";
+  std::string camerafile = "/home/zwu/data-0323/round1/timestamp.txt";
+  std::string output_dir = "/home/zwu/data-0323/round1/lidar_scan/";
  
  #ifdef OFFSET_TRANSFORM
   Eigen::Affine3d offset_tf;
@@ -85,7 +85,7 @@ int main(int argc, char** argv)
 
   // Do process
   std::cout << "Start processing... " << std::endl;
-  const double lidar_timestamp_offset = -2.1;
+  const double lidar_timestamp_offset = -2.02;
   int camIdx = 0, camIdxEnd = camera_times.size();
   BOOST_FOREACH(rosbag::MessageInstance const message, view)
   {
@@ -99,14 +99,14 @@ int main(int argc, char** argv)
     double lidar_timestamp = input_cloud->header.stamp.toSec() + lidar_timestamp_offset;
 
     // if camera timestamp is too far ahead, we proceed to next cloud msg
-    if(camera_times[camIdx] > lidar_timestamp + 0.04)
+    if(camera_times[camIdx] > lidar_timestamp + 0.02)
     {
       std::cout << "Skipping cloud at " << std::fixed << lidar_timestamp << std::endl;
       continue;
     }
 
     // if lidar timestamp is too far ahead, we increase the camera index
-    while(camera_times[camIdx] < lidar_timestamp - 0.04)
+    while(camera_times[camIdx] < lidar_timestamp - 0.02)
     {
       camIdx++;
       if(camIdx >= camIdxEnd)
@@ -117,10 +117,10 @@ int main(int argc, char** argv)
     }
 
     // if the two timestamps are near, do processing
-    while(camera_times[camIdx] < lidar_timestamp + 0.04)
+    while(camera_times[camIdx] < lidar_timestamp + 0.02)
     {
-      // check if they are within acceptable margin (1/60 sec)
-      if(std::fabs(camera_times[camIdx] - lidar_timestamp) < 1.0 / 60)
+      // check if they are within acceptable margin (1/120 sec)
+      if(std::fabs(camera_times[camIdx] - lidar_timestamp) < 1.0 / 120)
       {
         // Matches, convert pointcloud to txt file and save
         pcl::PointCloud<pcl::PointXYZI> pcl_cloud;
