@@ -87,7 +87,7 @@ using namespace std;
 // global variables
 static pose previous_pose, guess_pose, current_pose, ndt_pose, localizer_pose;
 static Eigen::Affine3d current_pose_tf, previous_pose_tf, relative_pose_tf;
-static ros::Publisher world_map_pub, local_map_pub, current_scan_pub, original_scan_pub;
+static ros::Publisher world_map_pub, local_map_pub, current_scan_pub;
 
 static ros::Time current_scan_time;
 static ros::Time previous_scan_time;
@@ -100,6 +100,7 @@ static double secs = 0.100085; // scan duration
 // static pcl::PointCloud<pcl::PointXYZI> world_map;
 static std::unordered_map<Key, Cloud_t> world_map;
 static Cloud_t local_map;
+static Cloud_t::Ptr local_map_ptr(new Cloud_t(local_map));
 static Key previous_key;
 static std::mutex mtx;
 
@@ -143,12 +144,10 @@ static inline double getYawAngle(double _x, double _y)
 
 static void update_local_map(pose local_pose)
 {
-  cdb
+  std::chrono::time_point<std::chrono::system_clock> t1 = std::chrono::system_clock::now();
   // Get local_key
   Key local_key = {int(floor(local_pose.x / TILE_WIDTH)),  // .x
                    int(floor(local_pose.y / TILE_WIDTH))}; // .y
-  // local_key.x = int(floor(local_pose.x / TILE_WIDTH));
-  // local_key.y = int(floor(local_pose.y / TILE_WIDTH));
 
   // Only update local_map through world_map only if local_key changes
   if(local_key != previous_key)
@@ -156,11 +155,10 @@ static void update_local_map(pose local_pose)
     std::lock_guard<std::mutex> lck(mtx);
     ROS_INFO("Local map changed.");
     // Get local_map, a 3x3 tile map with the center being the local_key
-    // local_map_ptr = Cloud_t::Ptr(new Cloud_t);
     local_map.clear();
     Key tmp_key;
-    for(int x = local_key.x - 2, x_max = local_key.x + 2; x <= x_max; x++)
-      for(int y = local_key.y - 2, y_max = local_key.y + 2; y <= y_max; y++)
+    for(int x = local_key.x - 1, x_max = local_key.x + 1; x <= x_max; x++)
+      for(int y = local_key.y - 1, y_max = local_key.y + 1; y <= y_max; y++)
       {
         tmp_key.x = x;
         tmp_key.y = y;
@@ -168,23 +166,26 @@ static void update_local_map(pose local_pose)
       }
 
     // Update key and map
+    local_map_ptr = Cloud_t::Ptr(new Cloud_t(local_map));
     previous_key = local_key;
-  // #ifdef USE_GPU_PCL
-  //   gpu_ndt.setInputTarget(local_map_ptr);
-  // #else
-  //   ndt.setInputTarget(local_map_ptr);
-  // #endif
+   #ifdef USE_GPU_PCL
+    gpu_ndt.setInputTarget(local_map_ptr);
+   #else
+    ndt.setInputTarget(local_map_ptr);
+   #endif
 
     sensor_msgs::PointCloud2 local_map_msg;
     pcl::toROSMsg(local_map, local_map_msg);
     local_map_msg.header.frame_id = "map";
     local_map_pub.publish(local_map_msg);
   }
+  std::chrono::time_point<std::chrono::system_clock> t2 = std::chrono::system_clock::now();
+  std::cout << "Updatelocalmap took: " << std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1000.0 << "ms.\n";
+
 }
 
 static void ndt_mapping_callback(const sensor_msgs::PointCloud2::ConstPtr& input)
 {
-  cdb
   std::chrono::time_point<std::chrono::system_clock> t1 = std::chrono::system_clock::now();
   double r;
   pcl::PointXYZI p;
@@ -201,7 +202,6 @@ static void ndt_mapping_callback(const sensor_msgs::PointCloud2::ConstPtr& input
   current_scan_time = input->header.stamp;
 
   pcl::fromROSMsg(*input, tmp);
-  // lidar_pcl::fromROSMsg(*input, tmp); // dont enable
 
   for(pcl::PointCloud<pcl::PointXYZI>::const_iterator item = tmp.begin(); item != tmp.end(); item++)
   {
@@ -227,17 +227,17 @@ static void ndt_mapping_callback(const sensor_msgs::PointCloud2::ConstPtr& input
   voxel_grid_filter.filter(*filtered_scan_ptr);
 
   Cloud_t::Ptr local_map_ptr(new Cloud_t(local_map));
-#ifdef USE_GPU_PCL
+ #ifdef USE_GPU_PCL
   gpu_ndt.setInputSource(filtered_scan_ptr);
-  gpu_ndt.setInputTarget(local_map_ptr);
-#else
+  // gpu_ndt.setInputTarget(local_map_ptr);
+ #else
   ndt.setInputSource(filtered_scan_ptr);
-  ndt.setInputTarget(local_map_ptr);
-#endif
+  // ndt.setInputTarget(local_map_ptr);
+ #endif
 
   guess_pose.x = previous_pose.x + diff_x;
   guess_pose.y = previous_pose.y + diff_y;
-  guess_pose.z = previous_pose.z + diff_z;
+  guess_pose.z = previous_pose.z;
   guess_pose.roll = previous_pose.roll;
   guess_pose.pitch = previous_pose.pitch;
   guess_pose.yaw = previous_pose.yaw + diff_yaw;
@@ -246,38 +246,35 @@ static void ndt_mapping_callback(const sensor_msgs::PointCloud2::ConstPtr& input
   Eigen::AngleAxisf init_rotation_y(guess_pose.pitch, Eigen::Vector3f::UnitY());
   Eigen::AngleAxisf init_rotation_z(guess_pose.yaw, Eigen::Vector3f::UnitZ());
   Eigen::Translation3f init_translation(guess_pose.x, guess_pose.y, guess_pose.z);
-  Eigen::Matrix4f init_guess =
-      (init_translation * init_rotation_z * init_rotation_y * init_rotation_x).matrix() * tf_btol;
-  std::cout << init_guess << std::endl;
-  cdb
+  Eigen::Matrix4f init_guess = (init_translation * init_rotation_z * init_rotation_y * init_rotation_x).matrix() * tf_btol;
+  
   t1 = std::chrono::system_clock::now();
-#ifdef USE_FAST_PCL
-  pcl::PointCloud<pcl::PointXYZI>::Ptr output_cloud(new pcl::PointCloud<pcl::PointXYZI>);
+ #ifdef USE_FAST_PCL
+  pcl::PointCloud<pcl::PointXYZI>::Ptr output_cloud(new pcl::PointCloud<pcl::PointXYZI>());
   ndt.omp_align(*output_cloud, init_guess);
   t_localizer = ndt.getFinalTransformation();
   has_converged = ndt.hasConverged();
   fitness_score = ndt.omp_getFitnessScore();
   final_num_iteration = ndt.getFinalNumIteration();
-#elif defined USE_GPU_PCL
+ #elif defined USE_GPU_PCL
   gpu_ndt.align(init_guess);
   t_localizer = gpu_ndt.getFinalTransformation();
   has_converged = gpu_ndt.hasConverged();
   fitness_score = gpu_ndt.getFitnessScore();
   final_num_iteration = gpu_ndt.getFinalNumIteration();
-#else
-  pcl::PointCloud<pcl::PointXYZI>::Ptr output_cloud(new pcl::PointCloud<pcl::PointXYZI>);
+ #else
+  pcl::PointCloud<pcl::PointXYZI>::Ptr output_cloud(new pcl::PointCloud<pcl::PointXYZI>());
   ndt.align(*output_cloud, init_guess);
-  cdb
   t_localizer = ndt.getFinalTransformation();
   has_converged = ndt.hasConverged();
   fitness_score = ndt.getFitnessScore();
   final_num_iteration = ndt.getFinalNumIteration();
-#endif
-  cdb
+ #endif
+  std::chrono::time_point<std::chrono::system_clock> t2 = std::chrono::system_clock::now();
+
   t_base_link = t_localizer * tf_ltob;
   
   tf::Matrix3x3 mat_l, mat_b;
-
   mat_l.setValue(static_cast<double>(t_localizer(0, 0)), static_cast<double>(t_localizer(0, 1)),
                  static_cast<double>(t_localizer(0, 2)), static_cast<double>(t_localizer(1, 0)),
                  static_cast<double>(t_localizer(1, 1)), static_cast<double>(t_localizer(1, 2)),
@@ -311,8 +308,9 @@ static void ndt_mapping_callback(const sensor_msgs::PointCloud2::ConstPtr& input
   pcl::getTransformation(current_pose.x, current_pose.y, current_pose.z,
                          current_pose.roll, current_pose.pitch, current_pose.yaw,
                          current_pose_tf);
+  relative_pose_tf = previous_pose_tf.inverse() * current_pose_tf;
 
-  // Calculate the offset (curren_pos - previous_pos)
+  // Calculate the offset (current_pos - previous_pos)
   diff_x = current_pose.x - previous_pose.x;
   diff_y = current_pose.y - previous_pose.y;
   diff_z = current_pose.z - previous_pose.z;
@@ -323,13 +321,13 @@ static void ndt_mapping_callback(const sensor_msgs::PointCloud2::ConstPtr& input
   
   pcl::transformPointCloud(*scan_ptr, *transformed_scan_ptr, t_localizer);
 
-#ifdef MY_EXTRACT_SCANPOSE
+ #ifdef MY_EXTRACT_SCANPOSE
   // outputing into csv, with add_scan_number = 0
   csv_stream << 0 << "," << input->header.seq << "," << current_scan_time.sec << "," << current_scan_time.nsec << ","
               << localizer_pose.x << "," << localizer_pose.y << "," << localizer_pose.z << ","
               << localizer_pose.roll << "," << localizer_pose.pitch << "," << localizer_pose.yaw
               << std::endl;
-#endif // MY_EXTRACT_SCANPOSE
+ #endif // MY_EXTRACT_SCANPOSE
 
   transform.setOrigin(tf::Vector3(current_pose.x, current_pose.y, current_pose.z));
   q.setRPY(current_pose.roll, current_pose.pitch, current_pose.yaw);
@@ -338,8 +336,6 @@ static void ndt_mapping_callback(const sensor_msgs::PointCloud2::ConstPtr& input
 
   scan_duration = current_scan_time - previous_scan_time;
   secs = scan_duration.toSec();
-
-  relative_pose_tf = previous_pose_tf.inverse() * current_pose_tf;
 
   // Update position and posture. current_pos -> previous_pos
   previous_pose.x = current_pose.x;
@@ -358,14 +354,7 @@ static void ndt_mapping_callback(const sensor_msgs::PointCloud2::ConstPtr& input
   pcl::toROSMsg(*transformed_scan_ptr, *scan_msg_ptr);
   current_scan_pub.publish(*scan_msg_ptr);
 
-  pcl::PointCloud<pcl::PointXYZI>::Ptr transformed_tmp_ptr(new pcl::PointCloud<pcl::PointXYZI>());
-  pcl::transformPointCloud(*filtered_scan_ptr, *transformed_tmp_ptr, t_localizer);
-  sensor_msgs::PointCloud2::Ptr tmp_msg_ptr(new sensor_msgs::PointCloud2);
-  pcl::toROSMsg(*transformed_tmp_ptr, *tmp_msg_ptr);
-  tmp_msg_ptr->header.frame_id = "map";
-  original_scan_pub.publish(*tmp_msg_ptr);
-
-  std::chrono::time_point<std::chrono::system_clock> t2 = std::chrono::system_clock::now();
+  // std::chrono::time_point<std::chrono::system_clock> t2 = std::chrono::system_clock::now();
   std::cout << "-----------------------------------------------------------------\n";
   std::cout << "Sequence number: " << input->header.seq << "\n";
   std::cout << "Number of scan points: " << scan_ptr->size() << " points.\n";
@@ -378,8 +367,7 @@ static void ndt_mapping_callback(const sensor_msgs::PointCloud2::ConstPtr& input
             << ", " << current_pose.pitch << ", " << current_pose.yaw << ")\n";
   std::cout << "Callback took: " << std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1000.0 << "ms.\n";
   std::cout << "-----------------------------------------------------------------" << std::endl;
-  cdb
-  // update_local_map(current_pose);
+  update_local_map(current_pose);
 }
 
 void mySigintHandler(int sig) // Publish the map/final_submap if node is terminated
@@ -426,10 +414,6 @@ void mySigintHandler(int sig) // Publish the map/final_submap if node is termina
 
 int main(int argc, char** argv)
 {
-  pcl::getTransformation(0, 0, 0, 0, 0, 0, current_pose_tf);
-  pcl::getTransformation(0, 0, 0, 0, 0, 0, previous_pose_tf);
-  pcl::getTransformation(0, 0, 0, 0, 0, 0, relative_pose_tf);
-
   ros::init(argc, argv, "ndt_localization", ros::init_options::NoSigintHandler);
   ros::NodeHandle private_nh("~");
 
@@ -448,12 +432,12 @@ int main(int argc, char** argv)
   private_nh.getParam("min_add_scan_shift", min_add_scan_shift);
   private_nh.getParam("min_add_scan_yaw_diff", min_add_scan_yaw_diff);
 
-  private_nh.getParam("initial_x", guess_pose.x);
-  private_nh.getParam("initial_y", guess_pose.y);
-  private_nh.getParam("initial_z", guess_pose.z);
-  private_nh.getParam("initial_roll", guess_pose.roll);
-  private_nh.getParam("initial_pitch", guess_pose.pitch);
-  private_nh.getParam("initial_yaw", guess_pose.yaw);
+  private_nh.getParam("initial_x", current_pose.x);
+  private_nh.getParam("initial_y", current_pose.y);
+  private_nh.getParam("initial_z", current_pose.z);
+  private_nh.getParam("initial_roll", current_pose.roll);
+  private_nh.getParam("initial_pitch", current_pose.pitch);
+  private_nh.getParam("initial_yaw", current_pose.yaw);
 
   private_nh.getParam("tf_x", _tf_x);
   private_nh.getParam("tf_y", _tf_y);
@@ -462,19 +446,19 @@ int main(int argc, char** argv)
   private_nh.getParam("tf_pitch", _tf_pitch);
   private_nh.getParam("tf_yaw", _tf_yaw);
 
-  current_pose.x = guess_pose.x;
-  current_pose.y = guess_pose.y;
-  current_pose.z = guess_pose.z;
-  current_pose.roll = guess_pose.roll;
-  current_pose.pitch = guess_pose.pitch;
-  current_pose.yaw = guess_pose.yaw;
+  guess_pose.x = current_pose.x;
+  guess_pose.y = current_pose.y;
+  guess_pose.z = current_pose.z;
+  guess_pose.roll = current_pose.roll;
+  guess_pose.pitch = current_pose.pitch;
+  guess_pose.yaw = current_pose.yaw;
 
-  previous_pose.y = guess_pose.x;
-  previous_pose.x = guess_pose.y;
-  previous_pose.z = guess_pose.z;
-  previous_pose.roll = guess_pose.roll;
-  previous_pose.pitch = guess_pose.pitch;
-  previous_pose.yaw = guess_pose.yaw;
+  previous_pose.x = current_pose.x;
+  previous_pose.y = current_pose.y;
+  previous_pose.z = current_pose.z;
+  previous_pose.roll = current_pose.roll;
+  previous_pose.pitch = current_pose.pitch;
+  previous_pose.yaw = current_pose.yaw;
 
   ndt_pose.x = 0.0;
   ndt_pose.y = 0.0;
@@ -483,6 +467,12 @@ int main(int argc, char** argv)
   ndt_pose.pitch = 0.0;
   ndt_pose.yaw = 0.0;
 
+  pcl::getTransformation(current_pose.x, current_pose.y, current_pose.z,
+                         current_pose.roll, current_pose.pitch, current_pose.yaw,
+                         current_pose_tf);
+  previous_pose_tf = current_pose_tf;
+  pcl::getTransformation(0, 0, 0, 0, 0, 0, relative_pose_tf);
+  
   diff = 0.0;
   diff_x = 0.0;
   diff_y = 0.0;
@@ -510,9 +500,8 @@ int main(int argc, char** argv)
   ros::Subscriber pcl_sub = nh.subscribe("/points_raw", 1000, ndt_mapping_callback);
 
   world_map_pub = nh.advertise<sensor_msgs::PointCloud2>("world_map", 1, true);
-  local_map_pub = nh.advertise<sensor_msgs::PointCloud2>("local_map", 10, true);
-  current_scan_pub = nh.advertise<sensor_msgs::PointCloud2>("current_scan", 10, true);
-  original_scan_pub = nh.advertise<sensor_msgs::PointCloud2>("source_scan", 10, true);
+  local_map_pub = nh.advertise<sensor_msgs::PointCloud2>("local_map", 1000, true);
+  current_scan_pub = nh.advertise<sensor_msgs::PointCloud2>("processed_scan", 1000, true);
 
   try
   {
@@ -552,8 +541,8 @@ int main(int argc, char** argv)
   // Update local_map for the first time
   previous_key = Key{int(floor(current_pose.x / TILE_WIDTH)), int(floor(current_pose.y / TILE_WIDTH))};
   local_map.clear();
-  for(int x = previous_key.x - 2, x_max = previous_key.x + 2; x <= x_max; x++)
-    for(int y = previous_key.y - 2, y_max = previous_key.y + 2; y <= y_max; y++)
+  for(int x = previous_key.x - 1, x_max = previous_key.x + 1; x <= x_max; x++)
+    for(int y = previous_key.y - 1, y_max = previous_key.y + 1; y <= y_max; y++)
     {
       Key tmp_key = {x, y};
       local_map += world_map[tmp_key];
@@ -564,20 +553,20 @@ int main(int argc, char** argv)
   local_map_msg.header.frame_id = "map";
   local_map_pub.publish(local_map_msg);
 
-  Cloud_t::Ptr local_map_ptr(new Cloud_t(local_map));
-#ifdef USE_GPU_PCL
+  local_map_ptr = Cloud_t::Ptr(new Cloud_t(local_map));
+ #ifdef USE_GPU_PCL
   gpu_ndt.setTransformationEpsilon(trans_eps);
   gpu_ndt.setStepSize(step_size);
   gpu_ndt.setResolution(ndt_res);
   gpu_ndt.setMaximumIterations(max_iter);
   gpu_ndt.setInputTarget(local_map_ptr);
-#else
+ #else
   ndt.setTransformationEpsilon(trans_eps);
   ndt.setStepSize(step_size);
   ndt.setResolution(ndt_res);
   ndt.setMaximumIterations(max_iter);
   ndt.setInputTarget(local_map_ptr);
-#endif
+ #endif
 
   Eigen::Translation3f tl_btol(_tf_x, _tf_y, _tf_z);                 // tl: translation
   Eigen::AngleAxisf rot_x_btol(_tf_roll, Eigen::Vector3f::UnitX());  // rot: rotation
@@ -591,10 +580,10 @@ int main(int argc, char** argv)
   Eigen::AngleAxisf rot_z_ltob((-1.0) * _tf_yaw, Eigen::Vector3f::UnitZ());
   tf_ltob = (tl_ltob * rot_z_ltob * rot_y_ltob * rot_x_ltob).matrix();
 
-#ifdef MY_EXTRACT_SCANPOSE // map_pose.csv
+ #ifdef MY_EXTRACT_SCANPOSE // map_pose.csv
   csv_stream.open(_output_directory + csv_filename);
   csv_stream << "key,sequence,sec,nsec,x,y,z,roll,pitch,yaw" << std::endl;
-#endif // MY_EXTRACT_SCANPOSE
+ #endif // MY_EXTRACT_SCANPOSE
 
   std::cout << "Start processing incoming clouds... " << std::endl;
   ros::spin();

@@ -17,18 +17,16 @@
   <arg name="min_add_scan_yaw_diff" default="0.013" />
 
   <!-- initial pose TODO: add GNSS when available T.T -->
-  <arg name="initial_x" default="-70.2406" />
-  <arg name="initial_y" default="10.4873" />
-  <arg name="initial_z" default="3.0330" />
-  <arg name="initial_roll" default="-0.0380" />
-  <arg name="initial_pitch" default="-0.0360" />
-  <arg name="initial_yaw" default="2.8090" />
+  <arg name="initial_x" default="-70.2561" />
+  <arg name="initial_y" default="10.4625" />
+  <arg name="initial_z" default="2.9815" />
+  <arg name="initial_roll" default="-0.0312" />
+  <arg name="initial_pitch" default="-0.0421" />
+  <arg name="initial_yaw" default="2.8115" />
   
   <!-- tf from lidar frame to car frame -->
-  <!-- <arg name="tf_x" default="1.2"/> -->
   <arg name="tf_x" default="0.0"/>
   <arg name="tf_y" default="0.0"/>
-  <!-- <arg name="tf_z" default="2.0"/> -->
   <arg name="tf_z" default="0.0"/>
   <arg name="tf_roll" default="0.0"/>
   <arg name="tf_pitch" default="0.0"/>
