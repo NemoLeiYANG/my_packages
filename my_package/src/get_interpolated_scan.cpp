@@ -21,10 +21,12 @@
 #include <string>
 #include <vector>
 
-#define OUTPUT_INTERPOLATED_POSE // to a csv file
+// #define OUTPUT_INTERPOLATED_POSE // to a csv file
 // #define VOXEL_GRID_OCCLUSION // do not enable
-#define OFFSET_TRANSFORM // Only enable for 6cams-Lidar32E-PX2 system!!
+// #define OFFSET_TRANSFORM // Only enable for 6cams-Lidar32E-PX2 system!!
 // #define ROS_PUBLISH // to publish for visualization
+#define SKIP_SCAN // reduce frame rate
+
 #ifdef ROS_PUBLISH
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -60,16 +62,16 @@ inline double calculateMinAngleDist(double first, double second) // in radian
 int main(int argc, char** argv)
 {
 #ifdef ROS_PUBLISH
-  ros::init(argc, argv, "get_perspective_full_map");
+  ros::init(argc, argv, "get_interpolated_scan");
   ros::NodeHandle nh;
   ros::Publisher scan_pub = nh.advertise<sensor_msgs::PointCloud2>("/my_scan", 100, true);
 #endif
   
   // Load input
-  std::string cloudfile = "/home/zwu/LIDAR-DATA/3oct-ds.pcd"; // pointcloud map
-  std::string posefile = "/home/zwu/data-0323/round1/ndt_matching.csv"; // localizing_pose
-  std::string camerafile = "/home/zwu/data-0323/round1/timestamp.txt"; // cam timestamp
-  std::string file_location = "/home/zwu/data-0323/round1/lidar_scan/"; // output dir
+  std::string cloudfile = "/home/zwu/demo_data/0.10_8jan-carpark2.pcd"; // pointcloud map
+  std::string posefile = "/home/zwu/data-0409/round-bw/2/ndt_matching_20180410_133110.csv"; // localizing_pose
+  std::string camerafile = "/home/zwu/data-0409/round-bw/2/timestamp.txt"; // cam timestamp
+  std::string file_location = "/home/zwu/data-0409/round-bw/2/lidar_scan/"; // output dir
   unsigned int start_index = 1;
   
  #ifdef OFFSET_TRANSFORM
@@ -121,11 +123,11 @@ int main(int argc, char** argv)
   // std::cout << "File sequence: " << line << std::endl;
   std::cout << "Expected sequence: key,seq,sec,nsec,x,y,z,roll,pitch,yaw" << std::endl;
   std::cout << "Collecting localized lidar poses and time stamps." << std::endl;
-  const double lidar_time_offset = -1.835; //-2.1; // -1.85; w/ offset tf
+  const double lidar_time_offset = -2.1; //-2.1; // -1.85; w/ offset tf
 
  #ifdef OUTPUT_INTERPOLATED_POSE
   std::ofstream intrpl_pose_stream;
-  std::string intrpl_pose_file = "/home/zwu/data-0323/round1/interpolated_pose.csv";
+  std::string intrpl_pose_file = "/home/zwu/data-0409/round-rgb/1/pose.csv";
   intrpl_pose_stream.open(intrpl_pose_file);
   intrpl_pose_stream << "timestamp,x,y,z,roll,pitch,yaw" << std::endl;
  #endif
@@ -170,7 +172,13 @@ int main(int argc, char** argv)
   std::cout << "INFO/WARN: Collecting camera timestamps / NO HEADER EXPECTED FOR THIS FILE." << std::endl;
   while(getline(cam_stream, line))
   {
-    double current_time = std::stoull(line.c_str()) / 1e6; // from us to s
+    // std::stringstream line_stream(line);
+    // std::string time_str;
+    // getline(line_stream, time_str, ' ');
+    // getline(line_stream, time_str); // due to index column, disable if comeback to old system
+    // double current_time = std::stoull(time_str) / 1e6; // from us to s
+    double current_time = std::stoull(line.c_str()) / 1e3; // from us to s
+
     // std::cout << "time: " << std::fixed << current_time << std::endl;
     camera_times.push_back(current_time);
   }
@@ -188,6 +196,9 @@ int main(int argc, char** argv)
   pose_diff.yaw = calculateMinAngleDist(lidar_poses[lIdx+1].yaw, lidar_poses[lIdx].yaw);
 
   unsigned int file_count = start_index;
+ #ifdef SKIP_SCAN
+  int skipc = -1;
+ #endif // SKIP_SCAN
   for(unsigned int cIdx = 0, cIdx_end = camera_times.size(); cIdx < cIdx_end; cIdx++)
   {
     std::cout << "[CAM/LIDAR]: [" << cIdx << "/" << lIdx << "]" << std::endl;
@@ -239,6 +250,13 @@ int main(int argc, char** argv)
     //   std::cout << "Cannot write!" << std::endl;
     //   return(-1);
     // }
+
+    skipc++;
+    if(skipc % 5 != 0)
+    {
+      file_count++;
+      continue;
+    }
 
     // Do interpolation
     double interpolating_ratio = (camera_times[cIdx] - lidar_times[lIdx]) / (lidar_times[lIdx+1] - lidar_times[lIdx]);
