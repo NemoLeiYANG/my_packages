@@ -25,6 +25,7 @@ ros::Publisher map_pub;
 Cloud_t src;
 pcl::NormalDistributionsTransform<Point_t, Point_t> ndt;
 bool has_map_cloud = false;
+Eigen::Affine3f tf_ros2PX2;
 
 using namespace ros;
 using namespace std;
@@ -38,9 +39,10 @@ void dynamic_configCb(my_package::transformPointsConfig &config, uint32_t level)
 	double roll = config.roll;
 	double pitch = config.pitch;
 	double yaw = config.yaw;
+  bool ifPX2 = config.ifPX2data;
   bool doNDT = config.doNDT;
   ROS_INFO("Reconfigure Requested. Proceeding to transform....");
-  printf("Input pose: (%.4f, %.4f, %.4f, %.4f, %.4f, %.4f)\n", x, y, z, roll, pitch, yaw);
+  printf("Input pose (velodyne): (%.4f, %.4f, %.4f, %.4f, %.4f, %.4f)\n", x, y, z, roll, pitch, yaw);
 
   Cloud_t dst;
   // Transformation matrix/Initial guess for NDT
@@ -70,6 +72,14 @@ void dynamic_configCb(my_package::transformPointsConfig &config, uint32_t level)
     mat3x3.getRPY(roll, pitch, yaw);
     printf("NDT pose: (%.4f, %.4f, %.4f, %.4f, %.4f, %.4f)\n", x, y, z, roll, pitch, yaw);
     transform = pcl::getTransformation(x, y, z, roll, pitch, yaw);
+  }
+
+  if(!ifPX2)
+  {
+    Eigen::Affine3f transform_ros = transform * tf_ros2PX2;
+    float xr, yr, zr, rollr, pitchr, yawr;
+    pcl::getTranslationAndEulerAngles(transform_ros, xr, yr, zr, rollr, pitchr, yawr);
+    printf("ROS pose: (%.4f, %.4f, %.4f, %.4f, %.4f, %.4f)\n", xr, yr, zr, rollr, pitchr, yawr);
   }
 
   // Transform pointcloud
@@ -128,6 +138,8 @@ int main(int argc, char** argv)
     return -1;
   }
   std::cout << "Loaded " << src.size() << " data points from " << pcd_filename << std::endl;
+
+  tf_ros2PX2 = pcl::getTransformation(0, 0, 0, 0, 0, +1.57079632679);
 
   dynamic_reconfigure::Server<my_package::transformPointsConfig> server;
   dynamic_reconfigure::Server<my_package::transformPointsConfig>::CallbackType f;
